@@ -1,0 +1,51 @@
+{
+  "key": "decisions",
+  "version": 1,
+  "itemTypes": {
+    "topic": {
+      "statuses": ["open", "settled"],
+      "body": "inline",
+      "impact": "medium",
+      "creation": { "agent": ["open"], "human": ["open"] },
+      "basis": { "agent": { "evidenceMin": 1, "orJustification": true } }
+    },
+    "option": {
+      "statuses": ["proposed", "chosen", "dropped"],
+      "provisionalStatus": "proposed",
+      "body": "inline",
+      "impact": "high",
+      "creation": { "agent": ["proposed"], "human": ["proposed", "chosen"] },
+      "basis": { "agent": { "evidenceMin": 1, "orJustification": true } },
+      "promotion": { "basis": { "any": { "evidenceMin": 1, "orJustification": true, "countsExisting": true } } }
+    },
+    "criterion": {
+      "statuses": ["active"],
+      "body": "inline",
+      "impact": "low",
+      "creation": { "agent": ["active"], "human": ["active"] },
+      "basis": { "agent": { "evidenceMin": 1, "orJustification": true } },
+      "fields": { "weight": { "type": "number" } }
+    }
+  },
+  "transitions": [
+    { "type": "option", "from": "proposed", "to": "chosen", "requires": "explicit" },
+    { "type": "option", "from": "proposed", "to": "dropped", "requires": "explicit" }
+  ],
+  "relationTypes": {
+    "belongs_to": {
+      "from": ["option"],
+      "to": ["topic"],
+      "basis": { "agent": { "evidenceMin": 1, "orJustification": true } },
+      "impact": "low"
+    },
+    "scores": {
+      "from": ["option"],
+      "to": ["criterion"],
+      "basis": { "agent": { "evidenceMin": 1, "orJustification": true } },
+      "impact": "medium",
+      "fields": { "score": { "type": "number", "required": true } }
+    }
+  },
+  "review": { "batchEligibleImpact": ["low"], "maxChangesPerSet": 10 },
+  "migrations": []
+}

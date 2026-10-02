@@ -1,0 +1,200 @@
+import { beforeAll, describe, expect, it } from 'vitest';
+import {
+  analyzeChange, validateChange, isBatchEligible,
+  type Change, type IssueCode, type Operation, type Origin,
+} from '../src';
+import {
+  agent, createItem, createRelation, draftOf, human, iid, just, retire, updateItem, evidenceFor,
+  type InMemoryLedger,
+} from '../src/testing';
+import { TEXT, h, neutralSchema, newLedger } from './fixtures';
+
+let l: InMemoryLedger;
+const E = () => evidenceFor(l.contents, TEXT, 'ferve a 100 °C');
+
+beforeAll(async () => {
+  l = newLedger();
+  const hash = l.contents.add('corpo do documento');
+  await h(l, createItem({ id: 'a1', type: 'alpha', status: 'final', content: 'alfa um' }));
+  await h(l, createItem({ id: 'a2', type: 'alpha', status: 'final', content: 'alfa dois' }));
+  await h(l, createItem({ id: 'b1', type: 'beta', status: 'final', content: 'beta um' }));
+  await h(l, createItem({ id: 'g1', type: 'gamma', status: 'open', content: 'gama um' }));
+  await h(l, createItem({ id: 'r1', type: 'alpha', status: 'final', content: 'alfa aposentado' }));
+  await h(l, retire({ item: 'r1' }));
+  await h(l, createItem({ id: 'd1', type: 'doc', status: 'live', contentHash: hash, attributes: { label: 'doc' } }));
+});
+
+function analyze(ops: Operation[], origin: Origin = human(), mutate: Partial<Change> = {}) {
+  const d = draftOf(l, { origin, ops });
+  return analyzeChange(neutralSchema, l.state, { ...d, impact: 'low', basisKind: 'none', ...mutate });
+}
+const codes = (ops: Operation[], origin: Origin = human()) =>
+  analyze(ops, origin).issues.map((i) => i.code);
+
+describe('validateChange: estrutura', () => {
+  const cases: Array<[string, Operation[] | (() => Operation[]), Origin, IssueCode]> = [
+    ['tipo de item desconhecido', [createItem({ id: 'n1', type: 'zeta', status: 'x', content: 'c' })], human(), 'unknown_item_type'],
+    ['status não permitido na criação por agente', () => [createItem({ id: 'n1', type: 'beta', status: 'final', content: 'c', evidence: [E()] })], agent(), 'status_not_allowed_on_creation'],
+    ['corpo inline sem content', [createItem({ id: 'n1', type: 'alpha', status: 'final' })], human(), 'body_mismatch'],
+    ['tipo content com content em vez de hash', [createItem({ id: 'n1', type: 'doc', status: 'live', content: 'x', attributes: { label: 'l' } })], human(), 'body_mismatch'],
+    ['atributo obrigatório ausente', [createItem({ id: 'n1', type: 'doc', status: 'live', contentHash: 'a'.repeat(64) })], human(), 'missing_attribute'],
+    ['atributo desconhecido', [createItem({ id: 'n1', type: 'alpha', status: 'final', content: 'c', attributes: { zzz: 1 } })], human(), 'unknown_attribute'],
+    ['item já existe', [createItem({ id: 'a1', type: 'alpha', status: 'final', content: 'c' })], human(), 'item_exists'],
+    ['relação com tipos de extremo não permitidos', [createRelation({ id: 'x1', type: 'backs', from: 'g1', to: 'a1' })], human(), 'endpoint_type_not_allowed'],
+    ['relação para item aposentado', [createRelation({ id: 'x1', type: 'backs', from: 'a1', to: 'r1' })], human(), 'item_retired'],
+    ['relação consigo mesmo', [createRelation({ id: 'x1', type: 'backs', from: 'a1', to: 'a1' })], human(), 'self_relation'],
+    ['sameType com tipos diferentes', [createRelation({ id: 'x1', type: 'replaces', from: 'a1', to: 'b1' })], human(), 'endpoint_type_not_allowed'],
+    ['relação sem atributo obrigatório', [createRelation({ id: 'x1', type: 'opposes', from: 'a1', to: 'b1' })], human(), 'missing_attribute'],
+    ['tipo de relação desconhecido', [createRelation({ id: 'x1', type: 'nope', from: 'a1', to: 'a2' })], human(), 'unknown_relation_type'],
+    ['update: before difere do estado', [updateItem({ id: 'a1', before: { content: 'errado' }, patch: { content: 'novo' } })], human(), 'before_mismatch'],
+    ['update: patch vazio', [updateItem({ id: 'a1', before: {}, patch: {} })], human(), 'empty_patch'],
+    ['update: status igual', [updateItem({ id: 'a1', before: { status: 'final' }, patch: { status: 'final' } })], human(), 'no_change'],
+    ['update: status desconhecido', [updateItem({ id: 'a1', before: { status: 'final' }, patch: { status: 'zzz' } })], human(), 'unknown_status'],
+    ['update: content em tipo content', [updateItem({ id: 'd1', before: { content: undefined }, patch: { content: 'x' } })], human(), 'patch_not_allowed'],
+    ['update de item aposentado', [updateItem({ id: 'r1', before: { content: 'alfa aposentado' }, patch: { content: 'x' } })], human(), 'item_retired'],
+    ['retire: já aposentado', [retire({ item: 'r1' })], human(), 'no_change'],
+    ['retire: motivo vazio', [retire({ item: 'a1', reason: ' ' })], human(), 'reason_missing'],
+    ['retire: alvo inexistente', [retire({ item: 'nao-existe' })], human(), 'item_missing'],
+    ['evidência malformada', () => [createItem({ id: 'n1', type: 'alpha', status: 'final', content: 'c', evidence: [{ ...E(), end: 0 }] })], human(), 'evidence_malformed'],
+  ];
+  for (const [name, ops, origin, code] of cases) {
+    it(name, () => {
+      const o = typeof ops === 'function' ? ops() : ops;
+      expect(codes(o, origin)).toContain(code);
+    });
+  }
+
+  it('reinstate de item aposentado é válido', () => {
+    expect(codes([retire({ item: 'r1', retired: false })])).toHaveLength(0);
+  });
+  it('operação pode referenciar item criado antes, no mesmo change', () => {
+    const ops = [
+      createItem({ id: 'n1', type: 'alpha', status: 'final', content: 'novo' }),
+      createRelation({ id: 'x1', type: 'backs', from: 'n1', to: 'a1' }),
+    ];
+    expect(codes(ops)).toHaveLength(0);
+  });
+  it('change vazio, sem justificativa, schema errado e base inválida', () => {
+    expect(codes([])).toContain('no_operations');
+    const d = draftOf(l, { origin: human(), ops: [retire({ item: 'a1' })], rationale: ' ' });
+    expect(analyzeChange(neutralSchema, l.state, { ...d, impact: 'low', basisKind: 'none' }).issues.map((i) => i.code)).toContain('missing_rationale');
+    const d2 = draftOf(l, { origin: human(), ops: [retire({ item: 'a1' })], base: 999 });
+    expect(analyzeChange(neutralSchema, l.state, { ...d2, impact: 'low', basisKind: 'none' }).issues.map((i) => i.code)).toContain('base_version_invalid');
+    const d3 = { ...draftOf(l, { origin: human(), ops: [retire({ item: 'a1' })] }), schemaRef: { key: 'outro', version: 1 } };
+    expect(analyzeChange(neutralSchema, l.state, { ...d3, impact: 'low', basisKind: 'none' }).issues.map((i) => i.code)).toContain('schema_mismatch');
+  });
+  it('impact/basisKind gravados que não batem com o calculado dão derived_mismatch', () => {
+    const d = draftOf(l, { origin: human(), ops: [retire({ item: 'a1' })] });
+    const bad: Change = { ...d, impact: 'high', basisKind: 'none' };
+    expect(validateChange(neutralSchema, l.state, bad).map((i) => i.code)).toContain('derived_mismatch');
+  });
+});
+
+describe('basis (evidência ou justificativa) e basisKind', () => {
+  it('agente cria alpha: exige evidência; justificativa não basta (sem orJustification)', () => {
+    const base = { id: 'n1', type: 'alpha', status: 'draft', content: 'c' };
+    expect(codes([createItem(base)], agent())).toContain('basis_missing');
+    expect(codes([createItem({ ...base, justification: just('uma justificativa longa o bastante', 'a1') })], agent())).toContain('basis_missing');
+    expect(analyze([createItem({ ...base, evidence: [E()] })], agent()).basisKind).toBe('evidence');
+  });
+  it('agente cria beta só com justificativa: válido, mas justification_only e impacto alto', () => {
+    const op = createItem({ id: 'n1', type: 'beta', status: 'draft', content: 'c', justification: just('derivado do item alfa um, por inferência', 'a1') });
+    const a = analyze([op], agent());
+    expect(a.issues).toHaveLength(0);
+    expect(a.basisKind).toBe('justification_only');
+    expect(a.impact).toBe('high');
+  });
+  it('justificativa curta, sem basedOn, ou citando item inexistente/aposentado falha', () => {
+    const mk = (j: ReturnType<typeof just>) =>
+      codes([createItem({ id: 'n1', type: 'beta', status: 'draft', content: 'c', justification: j })], agent());
+    expect(mk(just('curta', 'a1'))).toContain('basis_missing');
+    expect(mk(just('justificativa longa o suficiente aqui'))).toContain('basis_missing');
+    expect(mk(just('justificativa longa o suficiente aqui', 'nao-existe'))).toContain('basis_missing');
+    expect(mk(just('justificativa longa o suficiente aqui', 'r1'))).toContain('basis_missing');
+  });
+  it('basedOnMustInclude: replaces precisa citar os dois extremos', () => {
+    const rel = (j?: ReturnType<typeof just>, evidence = false) =>
+      codes([createRelation({ id: 'x1', type: 'replaces', from: 'a1', to: 'a2', justification: j, evidence: evidence ? [E()] : [] })], agent());
+    expect(rel(just('justificativa longa o suficiente aqui', 'a1'))).toContain('basis_missing');
+    expect(rel(just('justificativa longa o suficiente aqui', 'a1', 'a2'))).toHaveLength(0);
+    expect(rel(undefined, true)).toHaveLength(0);
+  });
+  it('evidência vence: com evidência E justificativa, basisKind é evidence', () => {
+    const op = createRelation({
+      id: 'x1', type: 'replaces', from: 'a1', to: 'a2',
+      evidence: [E()], justification: just('justificativa longa o suficiente aqui', 'a1', 'a2'),
+    });
+    expect(analyze([op], agent()).basisKind).toBe('evidence');
+  });
+  it('humano não precisa de basis para criar nem relacionar', () => {
+    const a = analyze([createItem({ id: 'n1', type: 'beta', status: 'final', content: 'meu' })]);
+    expect(a.issues).toHaveLength(0);
+    expect(a.basisKind).toBe('none');
+  });
+  it('um change é justification_only se QUALQUER operação depende só de justificativa', () => {
+    const ops = [
+      createItem({ id: 'n1', type: 'alpha', status: 'draft', content: 'c', evidence: [E()] }),
+      createRelation({ id: 'x1', type: 'replaces', from: 'n1', to: 'a1', justification: just('justificativa longa o suficiente aqui', 'n1', 'a1') }),
+    ];
+    expect(analyze(ops, agent()).basisKind).toBe('justification_only');
+  });
+});
+
+describe('promoção (vale para qualquer origem) e transições explícitas', () => {
+  it('promover item sem evidência ancorada exige justificativa, também de humano', async () => {
+    const lx = newLedger();
+    await h(lx, createItem({ id: 'a1', type: 'alpha', status: 'final', content: 'base' }));
+    const p = await lx.propose(draftOf(lx, {
+      origin: agent(),
+      ops: [createItem({ id: 'b2', type: 'beta', status: 'draft', content: 'x', justification: just('inferido do item base por análise', 'a1') })],
+    }));
+    if (!p.ok || p.applied) throw new Error('proposta esperada');
+    expect((await lx.review({ changeId: p.change!.id, decision: 'accept', reviewer: { kind: 'human', id: 'u1' as never } })).ok).toBe(true);
+    const promo = (justification?: ReturnType<typeof just>) =>
+      analyzeChange(neutralSchema, lx.state, {
+        ...draftOf(lx, { origin: human(), ops: [updateItem({ id: 'b2', before: { status: 'draft' }, patch: { status: 'final' }, justification })] }),
+        impact: 'low', basisKind: 'none',
+      });
+    expect(promo().issues.map((i) => i.code)).toContain('basis_missing');
+    const ok = promo(just('confirmado por mim na reunião', ));
+    expect(ok.issues).toHaveLength(0);
+    expect(ok.basisKind).toBe('justification_only');
+    expect(ok.promotions).toBe(1);
+    expect(ok.explicitTransitions).toHaveLength(1);
+  });
+  it('promover item com evidência já ancorada não exige nada além do ato', async () => {
+    const lx = newLedger();
+    const p = await lx.propose(draftOf(lx, {
+      origin: agent(),
+      ops: [createItem({ id: 'a2', type: 'alpha', status: 'draft', content: 'x', evidence: [evidenceFor(lx.contents, TEXT, 'ferve a 100 °C')] })],
+    }));
+    if (!p.ok || p.applied) throw new Error('proposta esperada');
+    await lx.review({ changeId: p.change!.id, decision: 'accept_provisional', reviewer: { kind: 'human', id: 'u1' as never } });
+    const a = analyzeChange(neutralSchema, lx.state, {
+      ...draftOf(lx, { origin: human(), ops: [updateItem({ id: 'a2', before: { status: 'draft' }, patch: { status: 'final' } })] }),
+      impact: 'low', basisKind: 'none',
+    });
+    expect(a.issues).toHaveLength(0);
+    expect(a.basisKind).toBe('evidence');
+  });
+});
+
+describe('elegibilidade a lote', () => {
+  it('só origem agente, impacto baixo, sem transição explícita e sem justification_only', () => {
+    const withEv = analyze([
+      createItem({ id: 'n1', type: 'gamma', status: 'open', content: 'pergunta' }),
+      createRelation({ id: 'x1', type: 'asks', from: 'a1', to: 'n1', evidence: [E()] }),
+    ], agent());
+    const d = draftOf(l, { origin: agent(), ops: [] });
+    expect(isBatchEligible(neutralSchema, d, withEv)).toBe(true);
+    const onlyJust = analyze([
+      createItem({ id: 'n1', type: 'gamma', status: 'open', content: 'pergunta' }),
+      createRelation({ id: 'x1', type: 'asks', from: 'a1', to: 'n1', justification: just('derivado do item alfa um, por análise', 'a1') }),
+    ], agent());
+    expect(onlyJust.impact).toBe('low');
+    expect(isBatchEligible(neutralSchema, d, onlyJust)).toBe(false);
+    expect(isBatchEligible(neutralSchema, draftOf(l, { origin: human(), ops: [] }), withEv)).toBe(false);
+  });
+});
+
+void iid;

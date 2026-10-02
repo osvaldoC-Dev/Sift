@@ -1,0 +1,104 @@
+{
+  "key": "research",
+  "version": 1,
+  "itemTypes": {
+    "claim": {
+      "statuses": ["provisional", "active"],
+      "provisionalStatus": "provisional",
+      "body": "inline",
+      "impact": "medium",
+      "creation": { "agent": ["provisional", "active"], "human": ["active"] },
+      "basis": { "agent": { "evidenceMin": 1 } },
+      "promotion": { "basis": { "any": { "evidenceMin": 1, "orJustification": true, "countsExisting": true } } }
+    },
+    "assumption": {
+      "statuses": ["provisional", "adopted"],
+      "provisionalStatus": "provisional",
+      "body": "inline",
+      "impact": "high",
+      "creation": { "agent": ["provisional"], "human": ["adopted"] },
+      "basis": { "agent": { "evidenceMin": 1, "orJustification": true } },
+      "promotion": { "basis": { "any": { "evidenceMin": 1, "orJustification": true, "countsExisting": true } } }
+    },
+    "decision": {
+      "statuses": ["provisional", "adopted"],
+      "provisionalStatus": "provisional",
+      "body": "inline",
+      "impact": "high",
+      "creation": { "agent": ["provisional"], "human": ["adopted"] },
+      "basis": { "agent": { "evidenceMin": 1, "orJustification": true } },
+      "promotion": { "basis": { "any": { "evidenceMin": 1, "orJustification": true, "countsExisting": true } } }
+    },
+    "question": {
+      "statuses": ["open", "closed"],
+      "body": "inline",
+      "impact": "low",
+      "creation": { "agent": ["open"], "human": ["open"] },
+      "basis": { "agent": { "evidenceMin": 1, "orJustification": true } }
+    },
+    "source": {
+      "statuses": ["active"],
+      "body": "content",
+      "impact": "low",
+      "creation": { "agent": [], "human": ["active"] },
+      "fields": { "label": { "type": "string", "required": true } }
+    },
+    "note": {
+      "statuses": ["active"],
+      "body": "content",
+      "impact": "low",
+      "creation": { "agent": [], "human": ["active"] }
+    }
+  },
+  "transitions": [
+    { "type": "claim", "from": "provisional", "to": "active", "requires": "explicit" },
+    { "type": "assumption", "from": "provisional", "to": "adopted", "requires": "explicit" },
+    { "type": "decision", "from": "provisional", "to": "adopted", "requires": "explicit" }
+  ],
+  "relationTypes": {
+    "supports": {
+      "from": ["claim"],
+      "to": ["claim", "assumption", "decision"],
+      "basis": { "agent": { "evidenceMin": 1 } },
+      "impact": "medium"
+    },
+    "challenges": {
+      "from": ["claim"],
+      "to": ["claim", "assumption", "decision"],
+      "basis": { "agent": { "evidenceMin": 1 } },
+      "impact": "high",
+      "fields": { "contradicts": { "type": "text", "required": true } }
+    },
+    "answers": {
+      "from": ["claim"],
+      "to": ["question"],
+      "basis": { "agent": { "evidenceMin": 1 } },
+      "impact": "medium"
+    },
+    "raises": {
+      "from": ["claim", "assumption", "decision"],
+      "to": ["question"],
+      "basis": { "agent": { "evidenceMin": 1, "orJustification": true } },
+      "impact": "low"
+    },
+    "supersedes": {
+      "sameType": true,
+      "basis": { "agent": { "evidenceMin": 1, "orJustification": true, "basedOnMustInclude": ["from", "to"] } },
+      "impact": "high"
+    },
+    "affects": {
+      "from": ["claim", "assumption"],
+      "to": ["decision"],
+      "basis": { "agent": { "evidenceMin": 1, "orJustification": true, "basedOnMustInclude": ["from", "to"] } },
+      "impact": "high"
+    },
+    "derived_from": {
+      "from": ["claim", "assumption", "question", "decision"],
+      "to": ["note", "source"],
+      "basis": { "agent": { "evidenceMin": 1 } },
+      "impact": "low"
+    }
+  },
+  "review": { "batchEligibleImpact": ["low"], "maxChangesPerSet": 12 },
+  "migrations": []
+}
