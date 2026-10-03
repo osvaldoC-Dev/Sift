@@ -142,9 +142,13 @@ describe('research@1: regras de base, promoção e decisão', () => {
       justification: just('inferido a partir da afirmação do usuário', 'c0'),
     })]);
     expect(l.changes.get(id)!.basisKind).toBe('justification_only');
-    expect(codeOf(await l.review({ changeId: id, decision: 'accept_provisional', reviewer: U }))).toBe('ok');
+    // só justificativa nunca passa por revisão leve: exige accept individual
+    const light = await l.review({ changeId: id, decision: 'accept_provisional', reviewer: U });
+    expect(codeOf(light)).toBe('decision_not_allowed');
+    if (!light.ok) expect(light.decisionIssues![0]!.code).toBe('accept_provisional_invalid');
+    expect(codeOf(await l.review({ changeId: id, decision: 'accept', reviewer: U }))).toBe('ok');
     expect(l.state.items.get(iid('x3'))?.status).toBe('provisional');
-    expect(l.log.at(-1)!.decision).toBe('accept_provisional');
+    expect(l.log.at(-1)!.decision).toBe('accept');
   });
 
   it('a regra de promoção vale para HUMANO: sem evidência ancorada exige justificativa', async () => {
@@ -153,7 +157,7 @@ describe('research@1: regras de base, promoção e decisão', () => {
       id: 'x3', type: 'assumption', status: 'provisional', content: 'inferência',
       justification: just('inferido a partir da afirmação do usuário', 'c0'),
     })]);
-    await l.review({ changeId: id, decision: 'accept_provisional', reviewer: U });
+    await l.review({ changeId: id, decision: 'accept', reviewer: U });
     const bare = await h(l, updateItem({ id: 'x3', before: { status: 'provisional' }, patch: { status: 'adopted' } }));
     expect(codeOf(bare)).toBe('invalid');
     const ok = await h(l, updateItem({
@@ -177,9 +181,17 @@ describe('research@1: regras de base, promoção e decisão', () => {
     const l = await withAssumptionBase();
     const q = await propose(l, [
       createItem({ id: 'q1', type: 'question', status: 'open', content: 'o que falta?', evidence: [E(l)] }),
-      createRelation({ id: 'rq', type: 'raises', from: 'c0', to: 'q1', evidence: [E(l)] }),
     ]);
     expect(codeOf(await l.review({ changeId: q, decision: 'accept_provisional', reviewer: U }))).toBe('ok');
+    // ligar a pergunta nova a uma afirmação JÁ ativa (compromisso) exige revisão individual
+    const link = await propose(l, [
+      createItem({ id: 'q2', type: 'question', status: 'open', content: 'e depois?', evidence: [E(l)] }),
+      createRelation({ id: 'rq', type: 'raises', from: 'c0', to: 'q2', evidence: [E(l)] }),
+    ], 'run4');
+    const lightLink = await l.review({ changeId: link, decision: 'accept_provisional', reviewer: U });
+    expect(codeOf(lightLink)).toBe('decision_not_allowed');
+    if (!lightLink.ok) expect(lightLink.decisionIssues![0]!.code).toBe('accept_provisional_invalid');
+    expect(codeOf(await l.review({ changeId: link, decision: 'accept', reviewer: U }))).toBe('ok');
 
     const active = await propose(l, [createItem({ id: 'x5', type: 'claim', status: 'active', content: 'ativa', evidence: [E(l)] })], 'run2');
     expect(codeOf(await l.review({ changeId: active, decision: 'accept_provisional', reviewer: U }))).toBe('decision_not_allowed');

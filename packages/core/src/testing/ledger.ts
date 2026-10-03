@@ -194,7 +194,7 @@ export class InMemoryLedger implements ContentReader {
     const analysis: Analysis = analyzeChange(this.deps.schema, this.state, effective);
     if (analysis.issues.length > 0) return { ok: false, code: 'invalid', issues: analysis.issues };
     const di = checkDecision(this.deps.schema, {
-      decision, reviewer, batch, edited, change, analysis, effectiveOperations: ops,
+      decision, reviewer, batch, edited, change, analysis, effectiveOperations: ops, state: this.state,
     });
     if (di.length > 0) return { ok: false, code: 'decision_not_allowed', decisionIssues: di };
     if (edited) {

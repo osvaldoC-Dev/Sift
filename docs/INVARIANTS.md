@@ -39,15 +39,20 @@ não tem basis (afirmação do próprio usuário).
 Decisão leve sobre uma visão geral. Só vale se **nada no change cria compromisso**:
 
 - só `create_item` e `create_relation`, origem agente, sem promoções nem transições explícitas;
+- **não pode ser `justification_only`**: um change sustentado só por justificativa exige `accept` individual,
+  coerente com a regra de que ele nunca entra em lote;
 - `create_item` de tipo **com** `provisionalStatus`: o status criado tem de ser o provisório;
 - `create_item` de tipo **sem** `provisionalStatus` (ex.: `question` no research): **permitido**, pois o schema
   declara que o tipo não distingue provisório de compromisso; regras de criação e de basis continuam valendo;
 - tipos que o agente não pode criar (`source`, `note`) falham na validação de criação, antes da decisão;
 - `create_relation` de tipo com impacto alto (`challenges`, `affects`, `supersedes`) **não entra**: relação não
-  tem status provisório, então exige `accept` individual.
+  tem status provisório, então exige `accept` individual;
+- `create_relation` só vale se os **dois extremos** forem (a) criados no mesmo change, (b) itens existentes ainda
+  no `provisionalStatus` do tipo, ou (c) itens existentes de tipo sem `provisionalStatus`. Ligar algo provisório
+  a um item já adotado (compromisso) exige `accept` individual.
 
-O log registra `decision: 'accept_provisional'`, o que permite à UI marcar esses itens como "aceitos em revisão
-leve".
+A recusa devolve o código `accept_provisional_invalid`, com o motivo específico na mensagem. O log registra
+`decision: 'accept_provisional'`, o que permite à UI marcar esses itens como "aceitos em revisão leve".
 
 ## Stale
 
