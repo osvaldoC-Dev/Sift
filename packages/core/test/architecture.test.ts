@@ -38,6 +38,22 @@ describe('fronteiras do core', () => {
     expect(bad).toEqual([]);
   });
 
+  it('o core não depende de nenhum pacote do workspace: nunca importa @sift/ai (nem @sift/*)', () => {
+    const bad: string[] = [];
+    for (const f of prod) {
+      const text = read(f);
+      const specs = [
+        ...text.matchAll(/^\s*(?:import|export)\b[^;]*?\bfrom\s+['"]([^'"]+)['"]/gm),
+        ...text.matchAll(/\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g),
+      ].map((m) => m[1]!);
+      for (const spec of specs) if (spec.startsWith('@sift/')) bad.push(`${f}: ${spec}`);
+    }
+    expect(bad).toEqual([]);
+    const pkg = JSON.parse(readFileSync(join(SRC, '..', 'package.json'), 'utf8')) as Record<string, Record<string, string> | undefined>;
+    const declared = [...Object.keys(pkg.dependencies ?? {}), ...Object.keys(pkg.devDependencies ?? {})];
+    expect(declared.filter((d) => d.startsWith('@sift/'))).toEqual([]);
+  });
+
   it('não conhece nenhum domínio: nenhum literal de tipo de item/relação do research no core', () => {
     const re = /['"`](claim|assumption|question|decision|source|note|research|decisions|supports|challenges|supersedes|affects|raises)['"`]/;
     const bad = prod.filter((f) => re.test(read(f)));

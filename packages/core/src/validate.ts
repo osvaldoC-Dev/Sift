@@ -14,7 +14,8 @@ export type IssueCode =
   | 'unknown_attribute' | 'missing_attribute' | 'invalid_attribute'
   | 'before_mismatch' | 'empty_patch' | 'patch_not_allowed' | 'no_change'
   | 'endpoint_type_not_allowed' | 'self_relation' | 'reason_missing'
-  | 'basis_missing' | 'evidence_malformed' | 'derived_mismatch' | 'invariant';
+  | 'basis_missing' | 'evidence_malformed' | 'derived_mismatch' | 'invariant'
+  | 'agent_provenance_incomplete' | 'support_none' | 'support_verdict_on_human';
 
 export interface Issue {
   code: IssueCode;
@@ -28,9 +29,15 @@ export interface Analysis {
   basisKind: BasisKind;
   explicitTransitions: TransitionDef[];
   promotions: number;
+  /**
+   * Quantas evidências de agente NÃO têm veredito de suporte 'full' (partial, unchecked ou ausente).
+   * Sempre 0 para origem humana, que não usa supportVerdict.
+   */
+  weakEvidence: number;
 }
 
 const HASH_RE = /^[0-9a-f]{64}$/;
+const VERDICTS: readonly string[] = ['full', 'partial', 'none', 'unchecked'];
 const RANK: Record<Impact, number> = { low: 0, medium: 1, high: 2 };
 
 const own = <T>(obj: Record<string, T>, key: string): T | undefined =>
@@ -146,6 +153,17 @@ export function analyzeChange(schema: ProjectSchema, state: State, change: Chang
     report('schema_mismatch', 'schemaRef não corresponde ao schema do projeto');
   }
   if (change.operations.length === 0) report('no_operations', 'o change não tem operações');
+  if (change.origin.kind === 'agent') {
+    const o = change.origin;
+    const missing = [
+      ...(o.runId.trim() === '' ? ['runId'] : []),
+      ...(o.model.trim() === '' ? ['model'] : []),
+      ...(o.promptVersion.trim() === '' ? ['promptVersion'] : []),
+    ];
+    if (missing.length > 0) {
+      report('agent_provenance_incomplete', `origem de agente sem proveniência completa: faltam ${missing.join(', ')}`);
+    }
+  }
   if (change.rationale.trim() === '') report('missing_rationale', 'justificativa do change vazia');
   if (!Number.isInteger(change.baseVersion) || change.baseVersion < 0 || change.baseVersion > state.version) {
     report('base_version_invalid', `baseVersion ${change.baseVersion} inválida (head ${state.version})`);
@@ -169,6 +187,16 @@ export function analyzeChange(schema: ProjectSchema, state: State, change: Chang
         Number.isInteger(ev.start) && Number.isInteger(ev.end) &&
         ev.start >= 0 && ev.end > ev.start && ev.quote.length > 0;
       if (!ok) rep('evidence_malformed', 'evidência malformada');
+      const v = ev.supportVerdict;
+      if (v !== undefined && !VERDICTS.includes(v)) {
+        rep('evidence_malformed', `supportVerdict inválido: ${String(v)}`);
+      } else if (origin.kind === 'human') {
+        if (v !== undefined) {
+          rep('support_verdict_on_human', 'evidência de origem humana não usa supportVerdict');
+        }
+      } else if (v === 'none') {
+        rep('support_none', 'o trecho citado não sustenta a afirmação (supportVerdict none): proposta recusada');
+      }
     }
 
     switch (op.op) {
@@ -325,7 +353,12 @@ export function analyzeChange(schema: ProjectSchema, state: State, change: Chang
   }
 
   const basisKind: BasisKind = anyJustification ? 'justification_only' : anyEvidence ? 'evidence' : 'none';
-  return { issues, impact, basisKind, explicitTransitions: explicit, promotions };
+  const weakEvidence =
+    origin.kind === 'agent'
+      ? change.operations.reduce(
+          (n, op) => n + op.evidence.filter((e) => e.supportVerdict !== 'full').length, 0)
+      : 0;
+  return { issues, impact, basisKind, explicitTransitions: explicit, promotions, weakEvidence };
 }
 
 /** Lista de problemas; vazia = válido. Os campos derivados do change devem bater com a análise. */

@@ -17,13 +17,37 @@ export type BasisKind = 'evidence' | 'justification_only' | 'none';
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 export type Attrs = { [key: string]: JsonValue };
 
-export type Origin = { kind: 'human'; actorId: UserId } | { kind: 'agent'; runId: RunId };
+/**
+ * Origem de um change. A de agente carrega a proveniência completa da execução: qual modelo,
+ * qual versão do prompt e quais parâmetros produziram a proposta (sem isso não dá para medir
+ * nem reproduzir). O relatório da execução (descartes, cobertura) NÃO mora aqui nem no log.
+ */
+export type AgentOrigin = {
+  kind: 'agent';
+  runId: RunId;
+  model: string;
+  promptVersion: string;
+  params: Attrs;
+};
+export type Origin = { kind: 'human'; actorId: UserId } | AgentOrigin;
+
+/**
+ * Veredito sobre se o trecho citado SUSTENTA a afirmação (existência do trecho é outra coisa:
+ * isso é verificado mecanicamente por `verifyEvidence`). Só vale para origem de agente.
+ *  - full:      o trecho sustenta a afirmação por inteiro;
+ *  - partial:   sustenta parte, ou com ressalvas;
+ *  - none:      não sustenta (recusado na validação);
+ *  - unchecked: ninguém verificou o suporte ainda.
+ * Ausente em evidência de agente = 'unchecked'.
+ */
+export type SupportVerdict = 'full' | 'partial' | 'none' | 'unchecked';
 
 export interface EvidenceRef {
   contentHash: Hash;
   start: number; // code points, inclusivo
   end: number; // code points, exclusivo
   quote: string;
+  supportVerdict?: SupportVerdict; // só origem de agente
 }
 
 export interface Justification {

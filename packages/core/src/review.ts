@@ -36,6 +36,7 @@ export type DecisionIssueCode =
   | 'reviewer_must_be_human'
   | 'accept_provisional_invalid'
   | 'batch_not_eligible'
+  | 'support_not_full'
   | 'edited_operations_required'
   | 'unexpected_edited_operations';
 export interface DecisionIssue {
@@ -43,17 +44,23 @@ export interface DecisionIssue {
   message: string;
 }
 
-/**
- * Elegível a revisão em lote: origem agente, impacto em batchEligibleImpact, sem transição
- * explícita e NÃO sustentado só por justificativa.
- */
-export function isBatchEligible(schema: ProjectSchema, change: Pick<Change, 'origin'>, analysis: Analysis): boolean {
+/** Estrutura do lote (sem olhar o suporte da evidência): origem agente, impacto baixo, sem transição. */
+function batchStructureOk(schema: ProjectSchema, change: Pick<Change, 'origin'>, analysis: Analysis): boolean {
   return (
     change.origin.kind === 'agent' &&
     schema.review.batchEligibleImpact.includes(analysis.impact) &&
     analysis.basisKind !== 'justification_only' &&
     analysis.explicitTransitions.length === 0
   );
+}
+
+/**
+ * Elegível a revisão em lote: origem agente, impacto em batchEligibleImpact, sem transição
+ * explícita, NÃO sustentado só por justificativa e com TODA evidência de suporte 'full'
+ * (partial, unchecked ou sem veredito exigem olho humano individual).
+ */
+export function isBatchEligible(schema: ProjectSchema, change: Pick<Change, 'origin'>, analysis: Analysis): boolean {
+  return batchStructureOk(schema, change, analysis) && analysis.weakEvidence === 0;
 }
 
 /**
@@ -135,8 +142,16 @@ export function checkDecision(schema: ProjectSchema, input: DecisionInput): Deci
     }
   }
 
-  if (input.batch && !isBatchEligible(schema, input.change, input.analysis)) {
+  if (input.batch && !batchStructureOk(schema, input.change, input.analysis)) {
     add('batch_not_eligible', 'este change exige revisão individual');
+  }
+  // Suporte não confirmado nunca passa por revisão leve nem por lote. A revisão individual
+  // (accept / accept_edited) continua permitida: é onde o humano julga o trecho com calma.
+  if ((input.decision === 'accept_provisional' || input.batch) && input.analysis.weakEvidence > 0) {
+    add(
+      'support_not_full',
+      `${input.analysis.weakEvidence} evidência(s) sem suporte confirmado (partial, unchecked ou sem veredito): exige revisão individual`,
+    );
   }
   return issues;
 }
