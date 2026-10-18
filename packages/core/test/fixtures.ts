@@ -28,7 +28,13 @@ export const neutralSchemaJson = {
     doc: {
       statuses: ['live'], body: 'content', impact: 'low',
       creation: { agent: [], human: ['live'] },
-      fields: { label: { type: 'string', required: true } },
+      fields: {
+        label: { type: 'string', required: true },
+        originType: { type: 'enum', values: ['human', 'ai'] },
+        originLabel: { type: 'string' },
+        originRunId: { type: 'string' },
+        capturedAt: { type: 'datetime' },
+      },
     },
   },
   transitions: [

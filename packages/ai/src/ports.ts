@@ -26,6 +26,11 @@ export interface ModelRequest {
   /** Schema da saída estruturada esperada. */
   schema: JsonSchema;
   params: ModelParams;
+  /**
+   * Cancelamento. Se já estiver abortado, a chamada rejeita com `ModelPortError('aborted')` sem
+   * consumir nada do modelo. Não faz parte da identidade do pedido (não entra no `requestHash`).
+   */
+  signal?: AbortSignal;
 }
 
 export interface ModelUsage {
@@ -50,7 +55,8 @@ export interface ModelPort {
 
 export type ModelPortErrorCode =
   | 'no_response' // nada roteirizado/gravado para esta chamada (só em modelos de teste)
-  | 'provider_error'; // falha do provedor (adaptadores reais)
+  | 'provider_error' // falha do provedor (adaptadores reais)
+  | 'aborted'; // o `signal` do pedido foi abortado
 
 export class ModelPortError extends Error {
   readonly code: ModelPortErrorCode;
@@ -59,4 +65,9 @@ export class ModelPortError extends Error {
     this.name = 'ModelPortError';
     this.code = code;
   }
+}
+
+/** Rejeita com `aborted` se o pedido já foi cancelado. Usado por todas as implementações da porta. */
+export function throwIfAborted(request: Pick<ModelRequest, 'signal'>): void {
+  if (request.signal?.aborted) throw new ModelPortError('aborted', 'chamada cancelada pelo signal');
 }

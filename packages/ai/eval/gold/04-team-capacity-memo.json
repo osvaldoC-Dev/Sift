@@ -1,0 +1,75 @@
+{
+  "source": "04-team-capacity-memo",
+  "file": "sources/04-team-capacity-memo.txt",
+  "items": [
+    {
+      "key": "cap.three-services-max",
+      "type": "claim",
+      "statement": "The on-call rotation can support at most three services in production.",
+      "quotes": [
+        "The current on-call rotation can support at most three services in production."
+      ]
+    },
+    {
+      "key": "cap.staffing-not-five",
+      "type": "claim",
+      "statement": "Current staffing does not support five services by the end of Q3.",
+      "quotes": [
+        "The current staffing does not support running five services by the end of Q3."
+      ]
+    },
+    {
+      "key": "cap.fourth-possible",
+      "type": "assumption",
+      "statement": "A fourth service may be possible if two engineers join in H2.",
+      "quotes": [
+        "We may be able to add a fourth service if two engineers join in the second half of the year."
+      ]
+    },
+    {
+      "key": "cap.four-of-eight-experienced",
+      "type": "claim",
+      "statement": "Four of eight engineers have run a service with an independent pipeline.",
+      "quotes": [
+        "Four of the eight engineers have operated a service with an independent deployment pipeline before."
+      ]
+    },
+    {
+      "key": "cap.training-six-weeks",
+      "type": "assumption",
+      "statement": "Training the other four is expected to take about six weeks.",
+      "quotes": [
+        "Training the remaining four is expected to take about six weeks."
+      ]
+    },
+    {
+      "key": "cap.no-tracing-experience",
+      "type": "claim",
+      "statement": "Nobody on the team has run a distributed trace in production.",
+      "quotes": [
+        "Nobody on the team has run a distributed trace in production."
+      ]
+    },
+    {
+      "key": "cap.platform-lend-question",
+      "type": "question",
+      "statement": "Will the platform team lend an engineer during the first extraction?",
+      "quotes": [
+        "It is unclear whether the platform team will lend an engineer during the first extraction."
+      ]
+    }
+  ],
+  "traps": [
+    {
+      "key": "cap.trap-fourth-as-fact",
+      "types": [
+        "claim"
+      ],
+      "quotes": [
+        "We may be able to add a fourth service if two engineers join in the second half of the year."
+      ],
+      "reason": "A conditional possibility stated as a fact."
+    }
+  ],
+  "injections": []
+}

@@ -4,10 +4,11 @@ import type { Clock, ContentReader, IdGenerator } from '../ports';
 import { reconstruct } from '../reconstruct';
 import { verifyEvidence, type FidelityFailure } from '../evidence';
 import { GENESIS_HASH, sealEntry } from '../log';
-import { checkDecision, deriveStatus, type DecisionIssue } from '../review';
+import { checkDecision, deriveStatus, reconcileEditedOperations, type DecisionIssue } from '../review';
 import type { ProjectSchema } from '../schema';
 import { staleReasons, touchedTargets, targetKey, type StaleReason } from '../stale';
 import { emptyState } from '../state';
+import { DEFAULT_SOURCE_KINDS, type SourceKinds } from '../source';
 import { analyzeChange, prepareChange, type Analysis, type Issue } from '../validate';
 import type {
   Change, ChangeDraft, ChangeId, ChangeStatus, Decision, LogEntry, Operation, ProjectId,
@@ -45,6 +46,8 @@ export interface LedgerDeps {
   projectId: ProjectId;
   clock: Clock;
   ids: IdGenerator;
+  /** Tipos de fonte aceitos. Padrão: só texto. */
+  kinds?: SourceKinds;
 }
 
 /**
@@ -54,6 +57,7 @@ export interface LedgerDeps {
  */
 export class InMemoryLedger implements ContentReader {
   readonly deps: LedgerDeps;
+  readonly kinds: SourceKinds;
   readonly contents = new InMemoryContents();
   readonly log: LogEntry[] = [];
   readonly changes = new Map<ChangeId, Change>();
@@ -63,6 +67,7 @@ export class InMemoryLedger implements ContentReader {
 
   constructor(deps: LedgerDeps) {
     this.deps = deps;
+    this.kinds = deps.kinds ?? DEFAULT_SOURCE_KINDS;
   }
 
   get(hash: string): Promise<string | undefined> {
@@ -95,9 +100,9 @@ export class InMemoryLedger implements ContentReader {
       return { ok: false, code: 'invalid', issues: [{ code: 'base_version_invalid', message: 'baseVersion inválida' }] };
     }
     const base = this.stateAt(draft.baseVersion);
-    const prep = prepareChange(this.deps.schema, base, draft);
+    const prep = prepareChange(this.deps.schema, base, draft, this.kinds);
     if (prep.issues.length > 0) return { ok: false, code: 'invalid', issues: prep.issues };
-    const failures = await verifyEvidence(prep.change.operations, this);
+    const failures = await verifyEvidence(prep.change.operations, this, undefined, this.kinds);
     if (failures.length > 0) return { ok: false, code: 'fidelity', failures };
     this.changes.set(prep.change.id, prep.change);
     if (staleReasons(prep.change, this.state).length > 0) this.markStale(prep.change.id);
@@ -137,7 +142,9 @@ export class InMemoryLedger implements ContentReader {
         }],
       };
     }
-    const ops = edited ? input.editedOperations! : change.operations;
+    const ops = edited
+      ? reconcileEditedOperations(change.origin, change.operations, input.editedOperations!)
+      : change.operations;
     return this.applyAccepted(change, ops, input.decision, input.reviewer, input.batch ?? false, edited);
   }
 
@@ -148,7 +155,7 @@ export class InMemoryLedger implements ContentReader {
       const prev = this.idem.get(draft.idempotencyKey);
       if (prev) return prev;
     }
-    const prep = prepareChange(this.deps.schema, this.state, draft);
+    const prep = prepareChange(this.deps.schema, this.state, draft, this.kinds);
     let outcome: Outcome;
     const stale = staleReasons(prep.change, this.state);
     if (stale.length > 0) {
@@ -156,7 +163,7 @@ export class InMemoryLedger implements ContentReader {
     } else if (prep.issues.length > 0) {
       outcome = { ok: false, code: 'invalid', issues: prep.issues };
     } else {
-      const failures = await verifyEvidence(prep.change.operations, this);
+      const failures = await verifyEvidence(prep.change.operations, this, undefined, this.kinds);
       if (failures.length > 0) {
         outcome = { ok: false, code: 'fidelity', failures };
       } else {
@@ -198,7 +205,7 @@ export class InMemoryLedger implements ContentReader {
     });
     if (di.length > 0) return { ok: false, code: 'decision_not_allowed', decisionIssues: di };
     if (edited) {
-      const failures = await verifyEvidence(ops, this);
+      const failures = await verifyEvidence(ops, this, undefined, this.kinds);
       if (failures.length > 0) return { ok: false, code: 'fidelity', failures };
     }
     return this.commit(change, analysis, ops, decision, reviewer, batch);

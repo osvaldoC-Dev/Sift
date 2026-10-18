@@ -1,4 +1,4 @@
-import { contentHash, normalizeText } from '../evidence';
+import { contentHash, normalizeText } from '../text';
 import type { Clock, ContentReader, IdGenerator } from '../ports';
 import type { Hash } from '../types';
 

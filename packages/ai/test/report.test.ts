@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { DISCARD_REASONS, type DiscardedItem, type RunReport } from '../src';
 
 describe('tipos do relatório de execução', () => {
-  it('lista exatamente os quatro motivos de descarte', () => {
+  it('lista exatamente os cinco motivos de descarte', () => {
     expect([...DISCARD_REASONS].sort()).toEqual(
-      ['duplicate', 'invalid_citation', 'not_supported', 'validation_refused'],
+      ['duplicate', 'invalid_citation', 'malformed_item', 'not_supported', 'validation_refused'],
     );
   });
 
@@ -14,12 +14,13 @@ describe('tipos do relatório de execução', () => {
       { ref: '$2', reason: 'invalid_citation', quote: 'the same phrase', problem: 'ambiguous', detail: 'aparece duas vezes' },
       { ref: '$3', reason: 'not_supported', quote: 'water is wet', verdict: 'none', detail: 'não sustenta' },
       { ref: '$4', reason: 'duplicate', duplicateOf: 'item-17', detail: 'já existe no estado' },
+      { ref: '$6', reason: 'malformed_item', detail: 'campos a mais: start' },
       { ref: '$5', reason: 'validation_refused', issueCodes: ['basis_missing', 'support_none'], detail: 'recusado' },
     ];
     const report: RunReport = {
       runId: 'run-1', baseVersion: 7, model: 'fake-model', promptVersion: 'extract@1',
       usage: { inputTokens: 1200, outputTokens: 340 },
-      modelChanges: 7, kept: 2, discarded,
+      modelChanges: 8, kept: 2, discarded, ambiguousCitations: ['$2'],
       coverage: [{ sourceId: 's1', contentHash: 'a'.repeat(64), passagesTotal: 12, passagesCited: 3 }],
     };
     expect(report.modelChanges).toBe(report.kept + report.discarded.length);

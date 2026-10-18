@@ -35,6 +35,13 @@
     só `@sift/core` e `@sift/schemas`; em `ai/src` (fora de um futuro `adapters/`) não há rede, sistema de
     arquivos nem relógio. Um teste de arquitetura impõe tudo isso.
 
+15. **O veredito de suporte não sobrevive a uma edição humana.** Em `accept_edited` de change de agente, as
+    operações efetivas passam por `reconcileEditedOperations`: se a parte que afirma (tudo menos a evidência)
+    é idêntica a uma operação original, cada evidência que já existia herda o veredito ORIGINAL; evidência nova
+    ou diferente, e toda a evidência de uma operação cujo conteúdo mudou, vira `unchecked`. Veredito escrito à
+    mão nas operações editadas é ignorado. Motivo: o log não pode afirmar uma checagem que nunca ocorreu sobre o
+    texto final.
+
 ## O modelo é uma função
 
 Entra contexto, sai saída estruturada (`ModelPort.generate`). O modelo **nunca escreve no estado, nunca gera IDs
@@ -98,3 +105,16 @@ Um change é stale se algum **alvo tocado** (item atualizado/aposentado ou extre
 `lastVersion > baseVersion`. Base diferente do head não basta. Verificação em três pontos: ao aceitar
 (autoritativo), na escrita (pendentes que tocam os alvos recebem evento `stale` de sistema) e na leitura
 (derivado). Não há processo em segundo plano. `stale` é monotônico.
+
+## Pipeline Extrair (3.2b, `ai/src/extract/`)
+
+- Uma fonte entra, saem **rascunhos de Change e um relatório**. O pipeline nunca escreve no log, nunca chama
+  `propose`/`review` e não importa nada de `@sift/core/testing` (teste lê os arquivos e confere).
+- O modelo devolve só `{type, statement, quote}`. IDs, deslocamentos e `supportVerdict` são do código.
+- A citação tem de existir, literalmente, na **passagem enviada** naquela chamada. Posição gravada = início da
+  passagem + índice achado, em code points, e o núcleo confere de novo contra a fonte inteira.
+- A citação é normalizada para NFC antes de procurar (a fonte guardada é NFC). Nada além disso é "consertado".
+- `supportVerdict` vem de uma chamada separada que vê **só** afirmação + citação. `none` descarta.
+- Forma errada da saída (modelo ou verificador) descarta a execução inteira, com erro tipado e `retryable`;
+  item inválido descarta só o item. Quem tenta de novo é o runner (3.3), em uma nova execução.
+- `decision` entra só como `provisional`, com citação, e o núcleo a trata como impacto alto: nunca em lote.

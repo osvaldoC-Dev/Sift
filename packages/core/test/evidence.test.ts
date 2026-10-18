@@ -4,6 +4,7 @@ import {
   contentHash, normalizeText, sliceCodePoints, verifyEvidence,
   type EvidenceRef, type Operation,
 } from '../src';
+import type { ContentReader } from '../src';
 import { InMemoryContents, createItem, evidenceFor } from '../src/testing';
 import { TEXT } from './fixtures';
 
@@ -66,5 +67,46 @@ describe('verifyEvidence', () => {
         },
       ),
     );
+  });
+});
+
+describe('verifyEvidence: o conteúdo devolvido é o snapshot citado (hash_mismatch)', () => {
+  const reasonWith = async (reader: ContentReader, ev: EvidenceRef) =>
+    (await verifyEvidence([opWith(ev)], reader))[0]?.reason;
+
+  it('o armazém devolve outro conteúdo para o mesmo hash', async () => {
+    const c = new InMemoryContents();
+    const good = evidenceFor(c, TEXT, 'ferve a 100 °C');
+    const lying: ContentReader = { get: async () => TEXT.replace('ferve', 'gela') };
+    expect(await reasonWith(lying, good)).toBe('hash_mismatch');
+  });
+
+  it('o hash é conferido ANTES do recorte: conteúdo trocado não vira out_of_range nem text_mismatch', async () => {
+    const c = new InMemoryContents();
+    const good = evidenceFor(c, TEXT, 'ferve a 100 °C');
+    const shorter: ContentReader = { get: async () => 'curto' };
+    expect(await reasonWith(shorter, good)).toBe('hash_mismatch');
+  });
+
+  it('conteúdo guardado SEM normalizar não é o snapshot: o hash é do texto normalizado', async () => {
+    const c = new InMemoryContents();
+    const good = evidenceFor(c, 'linha um\nlinha dois e mais texto', 'linha dois');
+    const raw: ContentReader = { get: async () => 'linha um\r\nlinha dois e mais texto' };
+    expect(await reasonWith(raw, good)).toBe('hash_mismatch');
+  });
+
+  it('o armazém honesto continua verificando (texto com BOM, CRLF e NFD entra normalizado)', async () => {
+    const c = new InMemoryContents();
+    const ev = evidenceFor(c, '\uFEFFcafe\u0301 com\r\nleite e pão', 'café com\nleite');
+    expect(await verifyEvidence([opWith(ev)], c)).toEqual([]);
+  });
+
+  it('várias evidências do mesmo conteúdo: cada uma é conferida, e a falha de hash aparece em todas', async () => {
+    const c = new InMemoryContents();
+    const a = evidenceFor(c, TEXT, 'ferve a 100 °C');
+    const b = evidenceFor(c, TEXT, 'ao nível do mar');
+    const lying: ContentReader = { get: async () => 'outro texto qualquer' };
+    const fails = await verifyEvidence([opWith(a), opWith(b)], lying);
+    expect(fails.map((f) => f.reason)).toEqual(['hash_mismatch', 'hash_mismatch']);
   });
 });

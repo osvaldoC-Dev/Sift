@@ -1,0 +1,102 @@
+{
+  "source": "02-incident-postmortem",
+  "file": "sources/02-incident-postmortem.txt",
+  "items": [
+    {
+      "key": "pm.p95-rose",
+      "type": "claim",
+      "statement": "p95 checkout latency rose from 410 ms to 484 ms after the split.",
+      "quotes": [
+        "After the split, p95 checkout latency rose from 410 ms to 484 ms."
+      ],
+      "note": "Contains non-breaking spaces (U+00A0) before the units. A citation typed with ordinary spaces does not match literally."
+    },
+    {
+      "key": "pm.pilot-sync-call",
+      "type": "claim",
+      "statement": "The pilot placed a synchronous network call between checkout and billing.",
+      "quotes": [
+        "The pilot placed a synchronous network call between checkout and billing."
+      ]
+    },
+    {
+      "key": "pm.pooling-hypothesis",
+      "type": "assumption",
+      "statement": "Connection pooling may have caused most of the added delay (unconfirmed).",
+      "quotes": [
+        "The team believes, but has not confirmed, that connection pooling accounted for most of the added delay."
+      ]
+    },
+    {
+      "key": "pm.no-latency-budget",
+      "type": "claim",
+      "statement": "No latency budget had been agreed for calls between services.",
+      "quotes": [
+        "No latency budget had been agreed for calls between services."
+      ]
+    },
+    {
+      "key": "pm.budget-question",
+      "type": "question",
+      "statement": "Which latency budget should apply to each inter-service call?",
+      "quotes": [
+        "Which latency budget should apply to each inter-service call is still open."
+      ]
+    },
+    {
+      "key": "pm.reporting-reads-billing",
+      "type": "claim",
+      "statement": "The reporting module reads billing tables directly, bypassing the billing API.",
+      "quotes": [
+        "the reporting module reads billing tables directly, bypassing the billing API"
+      ]
+    },
+    {
+      "key": "pm.rollback-40min",
+      "type": "claim",
+      "statement": "The rollback restored p95 latency to its previous level within 40 minutes.",
+      "quotes": [
+        "The rollback restored p95 latency to its previous level within 40 minutes."
+      ]
+    },
+    {
+      "key": "pm.latency-normal-40min",
+      "type": "claim",
+      "statement": "Latency returned to normal about forty minutes after the rollback.",
+      "quotes": [
+        "Latency returned to normal about forty minutes after the rollback."
+      ],
+      "note": "Says nearly the same as pm.rollback-40min (a duplicate)."
+    },
+    {
+      "key": "pm.abandoned-6pct",
+      "type": "claim",
+      "statement": "Roughly 6% of checkout attempts during the window were abandoned.",
+      "quotes": [
+        "Roughly 6% of checkout attempts during the window were abandoned."
+      ]
+    },
+    {
+      "key": "pm.oncall-paged",
+      "type": "claim",
+      "statement": "The on-call engineer, Zoé Okafor, was paged by the latency alert at 09:12.",
+      "quotes": [
+        "09:12 Zoé Okafor, the on-call engineer, was paged by the latency alert"
+      ],
+      "note": "The name is stored with a combining accent (U+0301) in the source. The text is compared after NFC normalization, so a citation typed with the precomposed é matches; one that changes the name does not."
+    }
+  ],
+  "traps": [
+    {
+      "key": "pm.trap-pooling-as-fact",
+      "types": [
+        "claim"
+      ],
+      "quotes": [
+        "The team believes, but has not confirmed, that connection pooling accounted for most of the added delay."
+      ],
+      "reason": "A hedged hypothesis stated as an established fact (the hedge was dropped)."
+    }
+  ],
+  "injections": []
+}

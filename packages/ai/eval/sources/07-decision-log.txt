@@ -1,0 +1,49 @@
+Architecture decision log: order platform migration
+
+This log records the decisions of the migration steering group. A decision is written down only after the group has agreed on it in a meeting. Proposals and discussion points are kept in a separate section at the end, so that nobody mistakes an idea for a commitment. Each entry has a number, a date and an owner who answers for it.
+
+Decision 1, 6 October. Owner: Dara Mensah.
+
+The first extraction will be the billing module. The group chose it because the first extraction should be the one with the fewest moving parts. The module belongs to the payments engineers, who will lead the work and report progress every Friday.
+
+Decision 2, 6 October. Owner: Dara Mensah.
+
+The first two services will call each other over plain HTTP. The group will not adopt a service mesh before the first extraction is finished. The question will be reopened after the first service has been in production for one release cycle.
+
+Decision 3, 13 October. Owner: Lena Ito.
+
+Pilot deployments are limited to the window between 22:00 and 04:00 local time. The group agreed on this after reading the post-mortem of the checkout pilot. Any exception needs the written agreement of the on-call lead, who keeps the record of exceptions in the incident tracker.
+
+Decision 4, 13 October. Owner: Lena Ito.
+
+Every call between services has a p95 latency budget of 50 ms, measured at the caller. A service that exceeds the budget for three consecutive days is reviewed by its owning team. The budget will be written into the runbook of each service, next to the alert thresholds.
+
+Decision 5, 20 October. Owner: Dara Mensah.
+
+The team will operate five services in production by the end of Q3. The group accepted this target for planning and for the cost model. The staffing plan for the target will be prepared by the engineering manager and presented at the next meeting.
+
+Open points
+
+The group has not decided who will own the shared session store after the split.
+
+The platform team has proposed adopting a service mesh now, instead of after the first extraction. The proposal will be placed on the agenda of the next meeting.
+
+Several engineers are leaning towards a canary release for the next pilot. The group will hear their reasons before it chooses between a canary release and a feature flag.
+
+The group expects to revisit the latency budget once measured figures from the first service are available.
+
+How the group meets
+
+The steering group meets every second Tuesday for one hour. The owner of each open item sends a short written update to the group two working days before the meeting, and the engineering manager collects the updates into a single page. A meeting that lacks a quorum of three members can still hear updates, but it cannot record a decision. In that case the items wait for the next meeting, unless the chair judges that waiting would put the schedule at risk, in which case the chair may call an extra session within the same week.
+
+Roles
+
+The chair opens the meeting, keeps time and calls for the vote when discussion has run its course. The scribe writes the log entry during the meeting and reads it back before the meeting closes, so that the group can correct the wording on the spot. The owner of a decision is responsible for following it up and for telling the group when circumstances have changed. The engineering manager keeps the calendar and the shared folder in order.
+
+Changing a decision
+
+Entries are not edited after the meeting. A change of course is recorded as a new decision that refers to the old one by number, and the old entry stays in the log exactly as it was written. Anyone who reads the log therefore sees how the thinking developed, not only where it ended up.
+
+Where this log lives
+
+The log is kept in the shared architecture folder, next to the cost model and the migration FAQ. The attendance of each meeting is recorded in the calendar invitation and not in the log. Questions about the log can be sent to the engineering manager or raised at the start of any meeting.
