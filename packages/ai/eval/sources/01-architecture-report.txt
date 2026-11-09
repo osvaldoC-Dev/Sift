@@ -1,0 +1,56 @@
+Monolith Decomposition: Architecture Assessment
+
+Prepared by the platform architecture group for the engineering leadership team.
+
+1. Summary
+
+This assessment examines whether the order-management monolith can be split into independently deployed services without harming customers. We mapped 40 request flows across the monolith and recorded which modules each flow touches. Billing depends on inventory in only 3 of the 40 mapped flows. On that basis, billing is the strongest candidate for a first extraction.
+
+The assessment covers coupling between modules, data ownership, a performance baseline and operational readiness. It does not cover cost, which is addressed in a separate memo from finance.
+
+2. Method
+
+Each request flow was traced from the public API entry point to the last database write. We counted a dependency whenever a module called code owned by another module or read data owned by another module. Flows were sampled from production traffic over a four-week period. We did not trace background jobs, which are covered in a separate document.
+
+Two engineers reviewed every trace independently. Disagreements were resolved in a joint session, and the final dependency table was frozen before any analysis began.
+
+3. Coupling findings
+
+Billing is the least coupled module in the codebase. It calls inventory in a small number of flows and never calls account management. Billing depends on inventory in only 3 of the 40 mapped flows. The remaining 37 flows touch billing only through its public interface.
+
+Checkout is the most coupled module. It touches seven other modules in a typical flow and shares a session store with account management. The shared session store introduces hidden depen-
+dencies between checkout and account management. Those dependencies are not visible in the module graph and will have to be removed before checkout can be extracted.
+
+Account management is moderately coupled and mostly read-only from the point of view of other modules.
+
+4. Data ownership
+
+The billing database is private to the billing module; no other module reads its tables. This is the main reason we consider billing safe to separate: its data can move with it, and no other team needs to change its queries.
+
+Inventory is different. Three modules write to the inventory tables directly, and the ownership rules are not documented. Any extraction touching inventory should start with a written ownership agreement.
+
+5. Performance baseline
+
+Median checkout latency is 180 ms under normal load. We have not measured the effect of adding a network hop between checkout and billing. It is not yet known how much latency a network hop between checkout and billing will add. The median payload exchanged between checkout and billing is 2 MB, which is larger than we expected and will matter for any network call.
+
+Load tests were run against a staging environment that mirrors production sizing but not production data volumes.
+
+6. Operational readiness
+
+The platform team currently provides a shared build system but no common deployment pipeline. We assume the platform team can provide a shared deployment pipeline before the first extraction. If it cannot, each extracted service will need its own pipeline, which changes the staffing picture considerably.
+
+Monitoring is per-host today. Distributed tracing is not available.
+
+7. Recommendation
+
+We recommend extracting billing first, keeping the public interface identical and running both implementations in parallel for two release cycles before cutting over. Checkout should not be touched until the session store has been separated.
+
+8. Risks
+
+The largest risk is organisational rather than technical. Three teams own code that billing touches, and none of them has agreed to a change freeze. A second risk is the duration of the parallel run: two release cycles is the minimum we consider safe, and any slip extends the period in which both implementations must be maintained.
+
+A third risk concerns testing. The existing integration suite takes about 50 minutes to run and exercises billing only indirectly. Before extraction, billing needs a contract test suite that can run on its own.
+
+9. Appendix: module summary
+
+Billing owns invoices, payments and refunds. Inventory owns stock levels and reservations. Account management owns customer profiles and credentials. Checkout orchestrates a purchase across the other three. Reporting reads from several modules and produces the nightly finance extracts.

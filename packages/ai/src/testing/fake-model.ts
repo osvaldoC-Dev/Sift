@@ -1,6 +1,6 @@
 import type { JsonValue } from '@sift/core';
 import {
-  ModelPortError,
+  ModelPortError, throwIfAborted,
   type ModelPort, type ModelRequest, type ModelResponse, type ModelUsage,
 } from '../ports';
 
@@ -37,7 +37,9 @@ export class FakeModel implements ModelPort {
   }
 
   async generate(request: ModelRequest): Promise<ModelResponse> {
-    this.seen.push(clone(request));
+    throwIfAborted(request);
+    const { signal: _signal, ...plain } = request;
+    this.seen.push(clone(plain));
     const step = this.steps[this.cursor];
     if (step === undefined) {
       throw new ModelPortError('no_response', `FakeModel: roteiro esgotado (${this.steps.length} passo(s))`);

@@ -15,7 +15,19 @@ const recordingOf = (steps: ContractStep[]): Recording => ({
 });
 runModelPortContract('RecordedModel', (steps: ContractStep[]) => new RecordedModel(recordingOf(steps)));
 
+describe('requestHash e signal', () => {
+  it('o signal não faz parte da identidade do pedido', () => {
+    const ctl = new AbortController();
+    expect(requestHash({ ...req('x'), signal: ctl.signal })).toBe(requestHash(req('x')));
+  });
+});
+
 describe('FakeModel (comportamento próprio)', () => {
+  it('registra as chamadas sem o signal', async () => {
+    const m = new FakeModel([{ output: 1 }]);
+    await m.generate({ ...req('x'), signal: new AbortController().signal });
+    expect('signal' in m.calls[0]!).toBe(false);
+  });
   it('ignora o conteúdo do pedido, devolve o roteiro em ordem e registra as chamadas', async () => {
     const m = new FakeModel([{ output: { n: 1 } }, { output: { n: 2 } }]);
     expect((await m.generate(req('first'))).output).toEqual({ n: 1 });

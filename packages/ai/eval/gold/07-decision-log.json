@@ -1,0 +1,92 @@
+{
+  "source": "07-decision-log",
+  "file": "sources/07-decision-log.txt",
+  "items": [
+    {
+      "key": "dec.billing-first",
+      "type": "decision",
+      "statement": "The first extraction will be the billing module.",
+      "quotes": [
+        "The first extraction will be the billing module."
+      ],
+      "note": "A decision recorded in the log with a number, a date and an owner."
+    },
+    {
+      "key": "dec.plain-http",
+      "type": "decision",
+      "statement": "The first two services call each other over plain HTTP, and no service mesh is adopted before the first extraction is finished.",
+      "quotes": [
+        "The first two services will call each other over plain HTTP.",
+        "The group will not adopt a service mesh before the first extraction is finished."
+      ],
+      "note": "Two sentences of the same entry state the same decision. A prediction that cites either one matches."
+    },
+    {
+      "key": "dec.pilot-window",
+      "type": "decision",
+      "statement": "Pilot deployments are limited to the window between 22:00 and 04:00 local time.",
+      "quotes": [
+        "Pilot deployments are limited to the window between 22:00 and 04:00 local time."
+      ]
+    },
+    {
+      "key": "dec.latency-budget-50ms",
+      "type": "decision",
+      "statement": "Every call between services has a p95 latency budget of 50 ms, measured at the caller.",
+      "quotes": [
+        "Every call between services has a p95 latency budget of 50 ms, measured at the caller."
+      ]
+    },
+    {
+      "key": "dec.five-services-q3",
+      "type": "decision",
+      "statement": "The team will operate five services in production by the end of Q3.",
+      "quotes": [
+        "The team will operate five services in production by the end of Q3."
+      ],
+      "note": "Contradicts the capacity memo (04), which says staffing supports at most three services."
+    },
+    {
+      "key": "dec.session-owner-open",
+      "type": "question",
+      "statement": "Who will own the shared session store after the split?",
+      "quotes": [
+        "The group has not decided who will own the shared session store after the split."
+      ],
+      "note": "An open point written as a statement. It is a question of the project, not a decision."
+    }
+  ],
+  "traps": [
+    {
+      "key": "dec.trap-mesh-proposal",
+      "types": [
+        "decision"
+      ],
+      "quotes": [
+        "The platform team has proposed adopting a service mesh now, instead of after the first extraction."
+      ],
+      "reason": "A proposal that nobody has decided, presented as a decision. It also conflicts with the recorded decision, so extracting it as one would create a false contradiction."
+    },
+    {
+      "key": "dec.trap-canary-leaning",
+      "types": [
+        "decision"
+      ],
+      "quotes": [
+        "Several engineers are leaning towards a canary release for the next pilot."
+      ],
+      "reason": "A hedged preference (a hypothesis about what the group may choose), not a choice. The next sentence says the group has not chosen yet."
+    },
+    {
+      "key": "dec.trap-revisit-budget",
+      "types": [
+        "decision"
+      ],
+      "quotes": [
+        "The group expects to revisit the latency budget once measured figures from the first service are available."
+      ],
+      "reason": "A conditional intention to revisit a decision, not a new decision."
+    }
+  ],
+  "injections": []
+}

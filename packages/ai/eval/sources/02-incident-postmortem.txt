@@ -1,0 +1,60 @@
+Post-mortem: Checkout latency incident of 14 March
+
+Status: final. Author: reliability engineering. Reviewed by: platform architecture group.
+
+Summary
+
+On 14 March a pilot split of the billing module was deployed behind a synchronous call from checkout. Within minutes, customers reported slow checkouts. After the split, p95 checkout latency rose from 410 ms to 484 ms. The change was rolled back and the incident was closed after the rollback was verified.
+
+Timeline
+
+09:05 The pilot deployment of the billing service was completed.
+09:12 Zoé Okafor, the on-call engineer, was paged by the latency alert and contacted the billing owner.
+09:31 The team agreed to roll back.
+09:48 The rollback was completed. The rollback restored p95 latency to its previous level within 40 minutes.
+
+Analysis
+
+The pilot placed a synchronous network call between checkout and billing. Previously the same interaction was an in-process function call.
+
+The team believes, but has not confirmed, that connection pooling accounted for most of the added delay. We did not have time to test this before the rollback.
+
+No latency budget had been agreed for calls between services. As a result nobody could say, before the deployment, how much added delay was acceptable. Which latency budget should apply to each inter-service call is still open.
+
+During the investigation we found that the reporting module reads billing tables directly, bypassing the billing API. That access was not in any design document. Because the billing tables were moved with the pilot service, reporting queries failed for part of the incident.
+
+Impact
+
+Roughly 6% of checkout attempts during the window were abandoned. Latency returned to normal about forty minutes after the rollback. Support received 212 tickets, most of them within the first hour.
+
+What went well
+
+The alert fired within four minutes of the first slow request. The decision to roll back was taken quickly and the rollback procedure worked as documented.
+
+Follow-ups
+
+Agree a latency budget for inter-service calls. Document table ownership for every module. Repeat the pilot with an asynchronous call and a canary release.
+
+Detection
+
+The latency alert is configured at the 95th percentile with a five-minute window. It fired at 09:09, four minutes after the pilot deployment finished. The page reached the on-call engineer three minutes after the alert fired. The engineer acknowledged it at once and opened an incident channel.
+
+Communication
+
+Customer support posted a banner on the status page at 09:25. A second update followed after the rollback. The banner stayed up until the following morning because the status page tool needs a manual action to remove it.
+
+Contributing factors
+
+The pilot was deployed on a weekday morning, which is the busiest period for the checkout flow. The deployment checklist did not require a load test, and none was run. The billing service used a default connection limit that had never been tuned for this traffic.
+
+Lessons
+
+Pilots that change a call path from in-process to network should be deployed outside peak hours. Every new service needs an agreed latency target before its first deployment, and the alert thresholds should be set from that target.
+
+Customer impact review
+
+Support grouped the 212 tickets by theme. Most described a spinner that never finished, and a smaller group described a payment that appeared to fail and was then charged anyway. Finance has been asked to reconcile those orders by hand. No data was lost, and no order was charged twice according to the payment provider's records.
+
+Open actions
+
+Each follow-up has an owner and a due date in the tracker. The reliability team will review the alert thresholds once the latency budget exists. The platform architecture group will decide whether the next pilot uses a canary release or a feature flag, and will report its choice at the next review meeting.

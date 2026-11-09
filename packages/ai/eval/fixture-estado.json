@@ -1,0 +1,536 @@
+{
+  "_aviso": "DADOS DE DEMONSTRAÇÃO. `status` e `support` foram atribuídos por uma regra fixa (ciclo pelo índice do item), não por revisão nem por modelo. Itens, citações e relações vêm do gabarito sintético do eval.",
+  "_regra": {
+    "status": "STATUS_CYCLE[type][i % 3], i = posição do item em items[]",
+    "support": "['full','full','partial','unchecked'][i % 4], i = posição do item em items[]"
+  },
+  "items": [
+    {
+      "id": "arch.billing-3-of-40",
+      "type": "claim",
+      "source": "01-architecture-report",
+      "text": "Billing depends on inventory in only 3 of 40 mapped flows.",
+      "quote": "Billing depends on inventory in only 3 of the 40 mapped flows.",
+      "status": "provisional",
+      "support": "full"
+    },
+    {
+      "id": "arch.billing-least-coupled",
+      "type": "claim",
+      "source": "01-architecture-report",
+      "text": "Billing is the least coupled module.",
+      "quote": "Billing is the least coupled module in the codebase.",
+      "status": "active",
+      "support": "full"
+    },
+    {
+      "id": "arch.checkout-most-coupled",
+      "type": "claim",
+      "source": "01-architecture-report",
+      "text": "Checkout is the most coupled module.",
+      "quote": "Checkout is the most coupled module.",
+      "status": "provisional",
+      "support": "partial"
+    },
+    {
+      "id": "arch.session-hidden-deps",
+      "type": "claim",
+      "source": "01-architecture-report",
+      "text": "The shared session store creates hidden dependencies between checkout and account management.",
+      "quote": "The shared session store introduces hidden depen-\ndencies between checkout and account management.",
+      "status": "provisional",
+      "support": "unchecked"
+    },
+    {
+      "id": "arch.billing-db-private",
+      "type": "claim",
+      "source": "01-architecture-report",
+      "text": "The billing database is private to the billing module.",
+      "quote": "The billing database is private to the billing module; no other module reads its tables.",
+      "status": "active",
+      "support": "full"
+    },
+    {
+      "id": "arch.inventory-writers",
+      "type": "claim",
+      "source": "01-architecture-report",
+      "text": "Three modules write to the inventory tables directly.",
+      "quote": "Three modules write to the inventory tables directly",
+      "status": "provisional",
+      "support": "full"
+    },
+    {
+      "id": "arch.median-latency-180",
+      "type": "claim",
+      "source": "01-architecture-report",
+      "text": "Median checkout latency is 180 ms under normal load.",
+      "quote": "Median checkout latency is 180 ms under normal load.",
+      "status": "provisional",
+      "support": "partial"
+    },
+    {
+      "id": "arch.payload-2mb",
+      "type": "claim",
+      "source": "01-architecture-report",
+      "text": "The median checkout-to-billing payload is 2 MB.",
+      "quote": "The median payload exchanged between checkout and billing is 2 MB",
+      "status": "active",
+      "support": "unchecked"
+    },
+    {
+      "id": "arch.latency-hop-unknown",
+      "type": "question",
+      "source": "01-architecture-report",
+      "text": "How much latency will a network hop between checkout and billing add?",
+      "quote": "It is not yet known how much latency a network hop between checkout and billing will add.",
+      "status": "open",
+      "support": "full"
+    },
+    {
+      "id": "arch.pipeline-assumption",
+      "type": "assumption",
+      "source": "01-architecture-report",
+      "text": "The platform team can provide a shared deployment pipeline before the first extraction.",
+      "quote": "We assume the platform team can provide a shared deployment pipeline before the first extraction.",
+      "status": "provisional",
+      "support": "full"
+    },
+    {
+      "id": "pm.p95-rose",
+      "type": "claim",
+      "source": "02-incident-postmortem",
+      "text": "p95 checkout latency rose from 410 ms to 484 ms after the split.",
+      "quote": "After the split, p95 checkout latency rose from 410 ms to 484 ms.",
+      "status": "active",
+      "support": "partial"
+    },
+    {
+      "id": "pm.pilot-sync-call",
+      "type": "claim",
+      "source": "02-incident-postmortem",
+      "text": "The pilot placed a synchronous network call between checkout and billing.",
+      "quote": "The pilot placed a synchronous network call between checkout and billing.",
+      "status": "provisional",
+      "support": "unchecked"
+    },
+    {
+      "id": "pm.pooling-hypothesis",
+      "type": "assumption",
+      "source": "02-incident-postmortem",
+      "text": "Connection pooling may have caused most of the added delay (unconfirmed).",
+      "quote": "The team believes, but has not confirmed, that connection pooling accounted for most of the added delay.",
+      "status": "provisional",
+      "support": "full"
+    },
+    {
+      "id": "pm.no-latency-budget",
+      "type": "claim",
+      "source": "02-incident-postmortem",
+      "text": "No latency budget had been agreed for calls between services.",
+      "quote": "No latency budget had been agreed for calls between services.",
+      "status": "active",
+      "support": "full"
+    },
+    {
+      "id": "pm.budget-question",
+      "type": "question",
+      "source": "02-incident-postmortem",
+      "text": "Which latency budget should apply to each inter-service call?",
+      "quote": "Which latency budget should apply to each inter-service call is still open.",
+      "status": "open",
+      "support": "partial"
+    },
+    {
+      "id": "pm.reporting-reads-billing",
+      "type": "claim",
+      "source": "02-incident-postmortem",
+      "text": "The reporting module reads billing tables directly, bypassing the billing API.",
+      "quote": "the reporting module reads billing tables directly, bypassing the billing API",
+      "status": "provisional",
+      "support": "unchecked"
+    },
+    {
+      "id": "pm.rollback-40min",
+      "type": "claim",
+      "source": "02-incident-postmortem",
+      "text": "The rollback restored p95 latency to its previous level within 40 minutes.",
+      "quote": "The rollback restored p95 latency to its previous level within 40 minutes.",
+      "status": "active",
+      "support": "full"
+    },
+    {
+      "id": "pm.latency-normal-40min",
+      "type": "claim",
+      "source": "02-incident-postmortem",
+      "text": "Latency returned to normal about forty minutes after the rollback.",
+      "quote": "Latency returned to normal about forty minutes after the rollback.",
+      "status": "provisional",
+      "support": "full"
+    },
+    {
+      "id": "pm.abandoned-6pct",
+      "type": "claim",
+      "source": "02-incident-postmortem",
+      "text": "Roughly 6% of checkout attempts during the window were abandoned.",
+      "quote": "Roughly 6% of checkout attempts during the window were abandoned.",
+      "status": "provisional",
+      "support": "partial"
+    },
+    {
+      "id": "pm.oncall-paged",
+      "type": "claim",
+      "source": "02-incident-postmortem",
+      "text": "The on-call engineer, Zoé Okafor, was paged by the latency alert at 09:12.",
+      "quote": "09:12 Zoé Okafor, the on-call engineer, was paged by the latency alert",
+      "status": "active",
+      "support": "unchecked"
+    },
+    {
+      "id": "cost.current-410k",
+      "type": "claim",
+      "source": "03-cost-memo",
+      "text": "Annual infrastructure cost of the monolith is $410,000.",
+      "quote": "Annual infrastructure cost of the current monolith is $410,000.",
+      "status": "provisional",
+      "support": "full"
+    },
+    {
+      "id": "cost.no-reduction-year-one",
+      "type": "claim",
+      "source": "03-cost-memo",
+      "text": "The migration will not reduce infrastructure cost in year one.",
+      "quote": "The migration will not reduce infrastructure cost in year one.",
+      "status": "provisional",
+      "support": "full"
+    },
+    {
+      "id": "cost.year-one-455k",
+      "type": "claim",
+      "source": "03-cost-memo",
+      "text": "Projected year-one infrastructure cost is $455,000.",
+      "quote": "Projected infrastructure cost in year one is $455,000, up from $410,000.",
+      "status": "active",
+      "support": "partial"
+    },
+    {
+      "id": "cost.reduce-by-year-three",
+      "type": "assumption",
+      "source": "03-cost-memo",
+      "text": "The migration is likely to reduce cost by year three if utilisation improves.",
+      "quote": "The migration is likely to reduce infrastructure cost by year three, assuming utilization improves.",
+      "status": "provisional",
+      "support": "unchecked"
+    },
+    {
+      "id": "cost.five-services-q3",
+      "type": "assumption",
+      "source": "03-cost-memo",
+      "text": "The team will operate five services in production by the end of Q3.",
+      "quote": "Planning assumes the team will operate five services in production by the end of Q3.",
+      "status": "provisional",
+      "support": "full"
+    },
+    {
+      "id": "cost.transfer-price",
+      "type": "claim",
+      "source": "03-cost-memo",
+      "text": "Traffic between services is billed at $0.02 per GB.",
+      "quote": "Traffic between services is billed at $0.02 per GB.",
+      "status": "active",
+      "support": "full"
+    },
+    {
+      "id": "cost.payload-2048kb",
+      "type": "claim",
+      "source": "03-cost-memo",
+      "text": "The median checkout-to-billing payload is 2048 KB.",
+      "quote": "The median payload between checkout and billing is 2048 KB",
+      "status": "provisional",
+      "support": "partial"
+    },
+    {
+      "id": "cost.billing-fewest-deps",
+      "type": "claim",
+      "source": "03-cost-memo",
+      "text": "Billing is the module with the fewest dependencies and the lowest extraction cost.",
+      "quote": "Billing is the module with the fewest dependencies, so it carries the lowest extraction cost.",
+      "status": "provisional",
+      "support": "unchecked"
+    },
+    {
+      "id": "cost.reserved-question",
+      "type": "question",
+      "source": "03-cost-memo",
+      "text": "Do reserved-instance discounts survive the split?",
+      "quote": "Whether reserved-instance discounts survive the split has not been checked with the vendor.",
+      "status": "closed",
+      "support": "full"
+    },
+    {
+      "id": "cost.network-tooling-rise",
+      "type": "claim",
+      "source": "03-cost-memo",
+      "text": "The cost table lists Network and tooling at $70,000 and $81,000 (columns: today and year one).",
+      "quote": "| Network and tooling | $70,000 | $81,000 |",
+      "status": "provisional",
+      "support": "full"
+    },
+    {
+      "id": "cap.three-services-max",
+      "type": "claim",
+      "source": "04-team-capacity-memo",
+      "text": "The on-call rotation can support at most three services in production.",
+      "quote": "The current on-call rotation can support at most three services in production.",
+      "status": "provisional",
+      "support": "partial"
+    },
+    {
+      "id": "cap.staffing-not-five",
+      "type": "claim",
+      "source": "04-team-capacity-memo",
+      "text": "Current staffing does not support five services by the end of Q3.",
+      "quote": "The current staffing does not support running five services by the end of Q3.",
+      "status": "active",
+      "support": "unchecked"
+    },
+    {
+      "id": "cap.fourth-possible",
+      "type": "assumption",
+      "source": "04-team-capacity-memo",
+      "text": "A fourth service may be possible if two engineers join in H2.",
+      "quote": "We may be able to add a fourth service if two engineers join in the second half of the year.",
+      "status": "provisional",
+      "support": "full"
+    },
+    {
+      "id": "cap.four-of-eight-experienced",
+      "type": "claim",
+      "source": "04-team-capacity-memo",
+      "text": "Four of eight engineers have run a service with an independent pipeline.",
+      "quote": "Four of the eight engineers have operated a service with an independent deployment pipeline before.",
+      "status": "provisional",
+      "support": "full"
+    },
+    {
+      "id": "cap.training-six-weeks",
+      "type": "assumption",
+      "source": "04-team-capacity-memo",
+      "text": "Training the other four is expected to take about six weeks.",
+      "quote": "Training the remaining four is expected to take about six weeks.",
+      "status": "adopted",
+      "support": "partial"
+    },
+    {
+      "id": "cap.no-tracing-experience",
+      "type": "claim",
+      "source": "04-team-capacity-memo",
+      "text": "Nobody on the team has run a distributed trace in production.",
+      "quote": "Nobody on the team has run a distributed trace in production.",
+      "status": "provisional",
+      "support": "unchecked"
+    },
+    {
+      "id": "cap.platform-lend-question",
+      "type": "question",
+      "source": "04-team-capacity-memo",
+      "text": "Will the platform team lend an engineer during the first extraction?",
+      "quote": "It is unclear whether the platform team will lend an engineer during the first extraction.",
+      "status": "open",
+      "support": "full"
+    },
+    {
+      "id": "vend.mtls-default",
+      "type": "claim",
+      "source": "05-vendor-blog",
+      "text": "Cloudlane Mesh enables mutual TLS between services by default.",
+      "quote": "Cloudlane Mesh enables mutual TLS between services by default.",
+      "status": "active",
+      "support": "full"
+    },
+    {
+      "id": "vend.retries-v32",
+      "type": "claim",
+      "source": "05-vendor-blog",
+      "text": "Cloudlane Mesh 3.2, released in February, added automatic retries with exponential backoff.",
+      "quote": "Cloudlane Mesh 3.2, released in February, added automatic retries with exponential backoff.",
+      "status": "provisional",
+      "support": "partial"
+    },
+    {
+      "id": "vend.free-ten",
+      "type": "claim",
+      "source": "05-vendor-blog",
+      "text": "Cloudlane Mesh is free for up to ten services.",
+      "quote": "Cloudlane Mesh is free for up to ten services.",
+      "status": "provisional",
+      "support": "unchecked"
+    },
+    {
+      "id": "faq.reference-14-months",
+      "type": "claim",
+      "source": "06-hostile-faq",
+      "text": "The reference migration took 14 months for a 2-million-line codebase.",
+      "quote": "The reference migration at a comparable company took 14 months for a 2-million-line codebase.",
+      "status": "active",
+      "support": "full"
+    },
+    {
+      "id": "faq.time-on-tables",
+      "type": "claim",
+      "source": "06-hostile-faq",
+      "text": "Most of that time went to untangling shared database tables.",
+      "quote": "Most of that time went to untangling shared database tables, not to writing new services.",
+      "status": "provisional",
+      "support": "full"
+    },
+    {
+      "id": "faq.session-store-hides-deps",
+      "type": "claim",
+      "source": "06-hostile-faq",
+      "text": "A shared session store hides dependencies between modules.",
+      "quote": "it hides dependencies between modules that look independent on paper",
+      "status": "provisional",
+      "support": "partial"
+    },
+    {
+      "id": "dec.billing-first",
+      "type": "decision",
+      "source": "07-decision-log",
+      "text": "The first extraction will be the billing module.",
+      "quote": "The first extraction will be the billing module.",
+      "status": "adopted",
+      "support": "unchecked"
+    },
+    {
+      "id": "dec.plain-http",
+      "type": "decision",
+      "source": "07-decision-log",
+      "text": "The first two services call each other over plain HTTP, and no service mesh is adopted before the first extraction is finished.",
+      "quote": "The first two services will call each other over plain HTTP.",
+      "status": "provisional",
+      "support": "full"
+    },
+    {
+      "id": "dec.pilot-window",
+      "type": "decision",
+      "source": "07-decision-log",
+      "text": "Pilot deployments are limited to the window between 22:00 and 04:00 local time.",
+      "quote": "Pilot deployments are limited to the window between 22:00 and 04:00 local time.",
+      "status": "provisional",
+      "support": "full"
+    },
+    {
+      "id": "dec.latency-budget-50ms",
+      "type": "decision",
+      "source": "07-decision-log",
+      "text": "Every call between services has a p95 latency budget of 50 ms, measured at the caller.",
+      "quote": "Every call between services has a p95 latency budget of 50 ms, measured at the caller.",
+      "status": "adopted",
+      "support": "partial"
+    },
+    {
+      "id": "dec.five-services-q3",
+      "type": "decision",
+      "source": "07-decision-log",
+      "text": "The team will operate five services in production by the end of Q3.",
+      "quote": "The team will operate five services in production by the end of Q3.",
+      "status": "provisional",
+      "support": "unchecked"
+    },
+    {
+      "id": "dec.session-owner-open",
+      "type": "question",
+      "source": "07-decision-log",
+      "text": "Who will own the shared session store after the split?",
+      "quote": "The group has not decided who will own the shared session store after the split.",
+      "status": "open",
+      "support": "full"
+    }
+  ],
+  "relations": [
+    {
+      "from": "arch.billing-db-private",
+      "to": "pm.reporting-reads-billing",
+      "kind": "contradiction",
+      "note": "Report says no other module reads billing tables; post-mortem found the reporting module reading them directly."
+    },
+    {
+      "from": "cost.five-services-q3",
+      "to": "cap.three-services-max",
+      "kind": "contradiction",
+      "note": "The cost plan assumes five services; the on-call rotation supports at most three."
+    },
+    {
+      "from": "cost.five-services-q3",
+      "to": "cap.staffing-not-five",
+      "kind": "contradiction",
+      "note": "The capacity memo says the plan of five services is not supported by staffing."
+    },
+    {
+      "from": "dec.five-services-q3",
+      "to": "cap.three-services-max",
+      "kind": "contradiction",
+      "note": "The decision log commits to five services by the end of Q3; the capacity memo says the on-call rotation supports at most three."
+    },
+    {
+      "from": "dec.five-services-q3",
+      "to": "cap.staffing-not-five",
+      "kind": "contradiction",
+      "note": "The decision log commits to five services by the end of Q3; the capacity memo says current staffing does not support running five."
+    },
+    {
+      "from": "arch.median-latency-180",
+      "to": "pm.p95-rose",
+      "kind": "near_miss",
+      "note": "Median vs 95th percentile: different statistics, no conflict."
+    },
+    {
+      "from": "arch.payload-2mb",
+      "to": "cost.payload-2048kb",
+      "kind": "near_miss",
+      "note": "The same quantity in different units (2 MB = 2048 KB)."
+    },
+    {
+      "from": "cost.no-reduction-year-one",
+      "to": "cost.reduce-by-year-three",
+      "kind": "near_miss",
+      "note": "Different time horizons: no reduction in year one, a likely reduction by year three."
+    },
+    {
+      "from": "cap.three-services-max",
+      "to": "cap.fourth-possible",
+      "kind": "near_miss",
+      "note": "The fourth service is conditional on hiring; the current limit stays three."
+    },
+    {
+      "from": "arch.billing-least-coupled",
+      "to": "cost.billing-fewest-deps",
+      "kind": "near_miss",
+      "note": "Similar but not the same claim: the report says billing is the least coupled module; the cost memo says it has the fewest dependencies and adds that it carries the lowest extraction cost. A linker that calls them duplicates is wrong."
+    },
+    {
+      "from": "arch.session-hidden-deps",
+      "to": "faq.session-store-hides-deps",
+      "kind": "near_miss",
+      "note": "A specific case (checkout and account management) and the general statement it illustrates (modules that look independent). They support each other but are not the same claim."
+    },
+    {
+      "from": "dec.latency-budget-50ms",
+      "to": "pm.p95-rose",
+      "kind": "near_miss",
+      "note": "A 50 ms budget per call between services versus a p95 of 484 ms for the whole checkout flow: different scopes, no conflict."
+    },
+    {
+      "from": "pm.rollback-40min",
+      "to": "pm.latency-normal-40min",
+      "kind": "duplicate",
+      "note": "Mesmo fato dito duas vezes (grupo de duplicatas do gabarito)."
+    },
+    {
+      "from": "arch.payload-2mb",
+      "to": "cost.payload-2048kb",
+      "kind": "duplicate",
+      "note": "Mesmo fato dito duas vezes (grupo de duplicatas do gabarito)."
+    }
+  ]
+}

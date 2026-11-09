@@ -223,4 +223,15 @@ describe('research@1: regras de base, promoção e decisão', () => {
     expect(isBatchEligible(schema(), l.changes.get(id)!, a)).toBe(true);
     expect(codeOf(await l.review({ changeId: id, decision: 'accept', reviewer: U, batch: true }))).toBe('ok');
   });
+  it('fonte aceita origem e capturedAt; rejeita origem fora do enum e data inválida', async () => {
+    const l = await withAssumptionBase();
+    const hash = l.contents.add(TEXT);
+    const src = (id: string, attributes: Record<string, string>) =>
+      h(l, createItem({ id, type: 'source', status: 'active', contentHash: hash, attributes: { label: 'fonte', ...attributes } }));
+    expect(codeOf(await src('s1', { originType: 'ai', originLabel: 'modelo X', originRunId: 'run-1', capturedAt: '2026-10-01T10:00:00Z' }))).toBe('ok');
+    expect(codeOf(await src('s2', { originType: 'robo' }))).toBe('invalid');
+    expect(codeOf(await src('s3', { capturedAt: '2026-02-30T10:00:00Z' }))).toBe('invalid');
+    expect(codeOf(await src('s4', { capturedAt: 'ontem' }))).toBe('invalid');
+    expect(codeOf(await src('s5', {}))).toBe('ok');
+  });
 });

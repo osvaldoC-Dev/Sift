@@ -1,0 +1,91 @@
+{
+  "source": "01-architecture-report",
+  "file": "sources/01-architecture-report.txt",
+  "items": [
+    {
+      "key": "arch.billing-3-of-40",
+      "type": "claim",
+      "statement": "Billing depends on inventory in only 3 of 40 mapped flows.",
+      "quotes": [
+        "Billing depends on inventory in only 3 of the 40 mapped flows."
+      ],
+      "repeated": true,
+      "note": "The sentence appears twice (summary and findings): an ambiguous citation. Either occurrence is a valid match."
+    },
+    {
+      "key": "arch.billing-least-coupled",
+      "type": "claim",
+      "statement": "Billing is the least coupled module.",
+      "quotes": [
+        "Billing is the least coupled module in the codebase."
+      ]
+    },
+    {
+      "key": "arch.checkout-most-coupled",
+      "type": "claim",
+      "statement": "Checkout is the most coupled module.",
+      "quotes": [
+        "Checkout is the most coupled module."
+      ]
+    },
+    {
+      "key": "arch.session-hidden-deps",
+      "type": "claim",
+      "statement": "The shared session store creates hidden dependencies between checkout and account management.",
+      "quotes": [
+        "The shared session store introduces hidden depen-\ndencies between checkout and account management."
+      ],
+      "note": "Line-wrapped with a hyphen. A citation that repairs the hyphenation does not exist literally in the source and must be rejected as invalid."
+    },
+    {
+      "key": "arch.billing-db-private",
+      "type": "claim",
+      "statement": "The billing database is private to the billing module.",
+      "quotes": [
+        "The billing database is private to the billing module; no other module reads its tables."
+      ]
+    },
+    {
+      "key": "arch.inventory-writers",
+      "type": "claim",
+      "statement": "Three modules write to the inventory tables directly.",
+      "quotes": [
+        "Three modules write to the inventory tables directly"
+      ]
+    },
+    {
+      "key": "arch.median-latency-180",
+      "type": "claim",
+      "statement": "Median checkout latency is 180 ms under normal load.",
+      "quotes": [
+        "Median checkout latency is 180 ms under normal load."
+      ]
+    },
+    {
+      "key": "arch.payload-2mb",
+      "type": "claim",
+      "statement": "The median checkout-to-billing payload is 2 MB.",
+      "quotes": [
+        "The median payload exchanged between checkout and billing is 2 MB"
+      ]
+    },
+    {
+      "key": "arch.latency-hop-unknown",
+      "type": "question",
+      "statement": "How much latency will a network hop between checkout and billing add?",
+      "quotes": [
+        "It is not yet known how much latency a network hop between checkout and billing will add."
+      ]
+    },
+    {
+      "key": "arch.pipeline-assumption",
+      "type": "assumption",
+      "statement": "The platform team can provide a shared deployment pipeline before the first extraction.",
+      "quotes": [
+        "We assume the platform team can provide a shared deployment pipeline before the first extraction."
+      ]
+    }
+  ],
+  "traps": [],
+  "injections": []
+}

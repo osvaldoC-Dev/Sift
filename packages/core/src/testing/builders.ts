@@ -1,6 +1,6 @@
-import { normalizeText } from '../evidence';
+import { normalizeText } from '../text';
 import type {
-  AgentOrigin, Attrs, ChangeDraft, ChangeId, EvidenceRef, ItemFields, ItemId, Justification, Operation,
+  AgentOrigin, Attrs, ChangeDraft, ChangeId, EvidenceRef, ItemFields, TextEvidence, ItemId, Justification, Operation,
   Origin, ProjectId, RelationId, RunId, SupportVerdict, UserId,
 } from '../types';
 import type { InMemoryContents } from './contents';
@@ -80,7 +80,7 @@ export function evidenceFor(
   text: string,
   quote: string,
   ...verdictArg: [] | [SupportVerdict | undefined]
-): EvidenceRef {
+): TextEvidence {
   const supportVerdict: SupportVerdict | undefined = verdictArg.length === 0 ? 'full' : verdictArg[0];
   const hash = contents.add(text);
   const normalized = normalizeText(text);
@@ -88,7 +88,7 @@ export function evidenceFor(
   if (idx < 0) throw new Error(`trecho não encontrado: ${quote}`);
   const start = Array.from(normalized.slice(0, idx)).length;
   const end = start + Array.from(normalizeText(quote)).length;
-  const ref: EvidenceRef = { contentHash: hash, start, end, quote: normalizeText(quote) };
+  const ref: TextEvidence = { contentHash: hash, start, end, quote: normalizeText(quote) };
   return supportVerdict === undefined ? ref : { ...ref, supportVerdict };
 }
 

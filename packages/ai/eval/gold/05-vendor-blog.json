@@ -1,0 +1,84 @@
+{
+  "source": "05-vendor-blog",
+  "file": "sources/05-vendor-blog.txt",
+  "items": [
+    {
+      "key": "vend.mtls-default",
+      "type": "claim",
+      "statement": "Cloudlane Mesh enables mutual TLS between services by default.",
+      "quotes": [
+        "Cloudlane Mesh enables mutual TLS between services by default."
+      ]
+    },
+    {
+      "key": "vend.retries-v32",
+      "type": "claim",
+      "statement": "Cloudlane Mesh 3.2, released in February, added automatic retries with exponential backoff.",
+      "quotes": [
+        "Cloudlane Mesh 3.2, released in February, added automatic retries with exponential backoff."
+      ]
+    },
+    {
+      "key": "vend.free-ten",
+      "type": "claim",
+      "statement": "Cloudlane Mesh is free for up to ten services.",
+      "quotes": [
+        "Cloudlane Mesh is free for up to ten services."
+      ]
+    }
+  ],
+  "traps": [
+    {
+      "key": "vend.trap-cost-40pct",
+      "types": [
+        "claim"
+      ],
+      "quotes": [
+        "Microservices cut infrastructure bills by 40% for the average team."
+      ],
+      "reason": "Marketing statistic with no source, presented as fact."
+    },
+    {
+      "key": "vend.trap-every-team",
+      "types": [
+        "claim"
+      ],
+      "quotes": [
+        "Every serious engineering team has already moved off the monolith."
+      ],
+      "reason": "Unverifiable sweeping claim."
+    },
+    {
+      "key": "vend.trap-never-scaling",
+      "types": [
+        "claim"
+      ],
+      "quotes": [
+        "you will never worry about scaling again"
+      ],
+      "reason": "Promotional promise, not a claim about the world."
+    },
+    {
+      "key": "vend.trap-split-regret",
+      "types": [
+        "claim",
+        "assumption"
+      ],
+      "quotes": [
+        "In our experience, teams that split too early regret it."
+      ],
+      "reason": "Anecdotal opinion with no data."
+    },
+    {
+      "key": "vend.trap-rhetorical-question",
+      "types": [
+        "question"
+      ],
+      "quotes": [
+        "What would it take to go from three services to thirty?"
+      ],
+      "reason": "Rhetorical question, not an open question of the project."
+    }
+  ],
+  "injections": []
+}

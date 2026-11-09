@@ -1,0 +1,29 @@
+# Integração contínua do Sift. Sem chaves, sem segredos, sem chamadas a modelos: os testes usam só modelos falsos
+# (a única "rede" dos testes é o laço local 127.0.0.1 do adaptador HTTP). A falha de qualquer passo reprova o
+# push/PR; para BLOQUEAR o merge, o Osvaldo marca este job como "required" na proteção do ramo (configuração do GitHub).
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck

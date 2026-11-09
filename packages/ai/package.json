@@ -8,6 +8,7 @@
     "./testing": "./src/testing/index.ts"
   },
   "dependencies": {
-    "@sift/core": "*"
+    "@sift/core": "*",
+    "@sift/schemas": "*"
   }
 }

@@ -1,0 +1,69 @@
+Cost memo: infrastructure impact of decomposition
+
+From: finance partner, engineering. To: engineering leadership.
+
+Purpose
+
+This memo estimates how the proposed decomposition changes infrastructure spend. It uses the coupling analysis from the architecture assessment and the incident data from March.
+
+Current spend
+
+Annual infrastructure cost of the current monolith is $410,000. Compute accounts for 62% of that figure and data storage for 21%, with the remainder in network and tooling.
+
+Year one
+
+The migration will not reduce infrastructure cost in year one. Running two implementations in parallel for two release cycles, as the assessment recommends, adds compute. Projected infrastructure cost in year one is $455,000, up from $410,000.
+
+Beyond year one
+
+The migration is likely to reduce infrastructure cost by year three, assuming utilization improves. We have not modelled a downside case in which utilization stays flat.
+
+Staffing assumption
+
+Planning assumes the team will operate five services in production by the end of Q3. Each service adds on-call load and a deployment pipeline to maintain. The cost of additional platform engineers is not included in the figures above.
+
+Data transfer
+
+Traffic between services is billed at $0.02 per GB. The median payload between checkout and billing is 2048 KB, so the checkout-to-billing path alone becomes a visible line item once the two are separated.
+
+Billing as the first candidate
+
+Billing is the module with the fewest dependencies, so it carries the lowest extraction cost. The assessment reaches the same conclusion from a technical angle.
+
+Open questions
+
+Whether reserved-instance discounts survive the split has not been checked with the vendor. Finance will confirm once the target architecture is stable.
+
+Assumptions about utilisation
+
+The projections use an average compute utilisation of 35% for the monolith today. The model assumes that separately deployed services can run at higher utilisation because they can be scaled independently. The memo does not test that assumption against real service data, because none exists yet.
+
+Sensitivity
+
+Each additional percentage point of utilisation lowers the year-three estimate by roughly $4,000. Network costs are the most uncertain line, because they depend on request volumes that will only be known after the first extraction.
+
+Method notes
+
+Storage costs are taken from the current invoices. Compute costs are modelled from instance hours. Tooling costs include the observability platform licence, which is expected to rise with the number of services. All figures are in US dollars and exclude staff costs.
+
+Cost breakdown
+
+The table below splits the annual figure by line, in US dollars, for today and for year one.
+
+| Line | Today | Year one |
+| Compute | $254,000 | $288,000 |
+| Storage | $86,000 | $86,000 |
+| Network and tooling | $70,000 | $81,000 |
+| Total | $410,000 | $455,000 |
+
+Review process
+
+Finance will review the figures with engineering at the end of each quarter during the migration. Any change of more than five percent in a line is reported to leadership with a short explanation. Engineering owns the instance-hour model, and finance owns the invoice data that feeds it.
+
+Scope of this memo
+
+The memo covers infrastructure only. It does not cover licences for development tools, the cost of recruiting, training time for the team, or the effect of the migration on support tickets. Those items belong to separate estimates. Leadership asked for the infrastructure view first so that the decision on the first extraction does not wait for the others.
+
+Timeline for the next estimate
+
+The next version of this memo will follow the first extraction and will replace the modelled compute figures with measured ones. Finance will also request the vendor's quote for the observability platform at that point, because the licence is priced per service and the number of services will be known by then. Until that revision, the figures here should be read as planning numbers, not as a budget.

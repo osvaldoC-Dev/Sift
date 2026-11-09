@@ -60,6 +60,11 @@ describe('fronteiras do core', () => {
     expect(bad).toEqual([]);
   });
 
+  it('não lê o capturedAt: dado declarado pelo usuário e não verificado nunca entra em lógica do núcleo', () => {
+    const bad = prod.filter((f) => /capturedAt/.test(read(f)));
+    expect(bad).toEqual([]);
+  });
+
   it('é determinístico: sem relógio, aleatoriedade, rede nem DOM direto', () => {
     const re = /\b(Date\.now|Math\.random|new Date\(|fetch\(|process\.|document\.|window\.|localStorage)/;
     const bad = prod.filter((f) => re.test(read(f)));

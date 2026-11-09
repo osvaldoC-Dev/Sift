@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   analyzeChange, validateChange, isBatchEligible,
   type Change, type IssueCode, type Operation, type Origin,
@@ -12,7 +12,8 @@ import { TEXT, h, neutralSchema, newLedger } from './fixtures';
 let l: InMemoryLedger;
 const E = () => evidenceFor(l.contents, TEXT, 'ferve a 100 °C');
 
-beforeAll(async () => {
+// Montagem na COLETA (top-level await): os casos abaixo chamam E() ao montar a tabela, antes de qualquer beforeAll.
+await (async () => {
   l = newLedger();
   const hash = l.contents.add('corpo do documento');
   await h(l, createItem({ id: 'a1', type: 'alpha', status: 'final', content: 'alfa um' }));
@@ -22,7 +23,7 @@ beforeAll(async () => {
   await h(l, createItem({ id: 'r1', type: 'alpha', status: 'final', content: 'alfa aposentado' }));
   await h(l, retire({ item: 'r1' }));
   await h(l, createItem({ id: 'd1', type: 'doc', status: 'live', contentHash: hash, attributes: { label: 'doc' } }));
-});
+})();
 
 function analyze(ops: Operation[], origin: Origin = human(), mutate: Partial<Change> = {}) {
   const d = draftOf(l, { origin, ops });
@@ -32,9 +33,9 @@ const codes = (ops: Operation[], origin: Origin = human()) =>
   analyze(ops, origin).issues.map((i) => i.code);
 
 describe('validateChange: estrutura', () => {
-  const cases: Array<[string, Operation[] | (() => Operation[]), Origin, IssueCode]> = [
+  const cases: Array<[string, Operation[], Origin, IssueCode]> = [
     ['tipo de item desconhecido', [createItem({ id: 'n1', type: 'zeta', status: 'x', content: 'c' })], human(), 'unknown_item_type'],
-    ['status não permitido na criação por agente', () => [createItem({ id: 'n1', type: 'beta', status: 'final', content: 'c', evidence: [E()] })], agent(), 'status_not_allowed_on_creation'],
+    ['status não permitido na criação por agente', [createItem({ id: 'n1', type: 'beta', status: 'final', content: 'c', evidence: [E()] })], agent(), 'status_not_allowed_on_creation'],
     ['corpo inline sem content', [createItem({ id: 'n1', type: 'alpha', status: 'final' })], human(), 'body_mismatch'],
     ['tipo content com content em vez de hash', [createItem({ id: 'n1', type: 'doc', status: 'live', content: 'x', attributes: { label: 'l' } })], human(), 'body_mismatch'],
     ['atributo obrigatório ausente', [createItem({ id: 'n1', type: 'doc', status: 'live', contentHash: 'a'.repeat(64) })], human(), 'missing_attribute'],
@@ -55,12 +56,11 @@ describe('validateChange: estrutura', () => {
     ['retire: já aposentado', [retire({ item: 'r1' })], human(), 'no_change'],
     ['retire: motivo vazio', [retire({ item: 'a1', reason: ' ' })], human(), 'reason_missing'],
     ['retire: alvo inexistente', [retire({ item: 'nao-existe' })], human(), 'item_missing'],
-    ['evidência malformada', () => [createItem({ id: 'n1', type: 'alpha', status: 'final', content: 'c', evidence: [{ ...E(), end: 0 }] })], human(), 'evidence_malformed'],
+    ['evidência malformada', [createItem({ id: 'n1', type: 'alpha', status: 'final', content: 'c', evidence: [{ ...E(), end: 0 }] })], human(), 'evidence_malformed'],
   ];
   for (const [name, ops, origin, code] of cases) {
     it(name, () => {
-      const o = typeof ops === 'function' ? ops() : ops;
-      expect(codes(o, origin)).toContain(code);
+      expect(codes(ops, origin)).toContain(code);
     });
   }
 
