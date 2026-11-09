@@ -1,10 +1,10 @@
 import { canonicalize, sha256Hex } from '@sift/core';
 import {
-  ModelPortError,
+  ModelPortError, throwIfAborted,
   type ModelPort, type ModelRequest, type ModelResponse,
 } from '../ports';
 
-/** Identidade do pedido: hash do JSON canônico de system, messages, schema e params. */
+/** Identidade do pedido: hash do JSON canônico de system, messages, schema e params (o `signal` não conta). */
 export function requestHash(request: ModelRequest): string {
   return sha256Hex(
     canonicalize({
@@ -48,6 +48,7 @@ export class RecordedModel implements ModelPort {
   }
 
   async generate(request: ModelRequest): Promise<ModelResponse> {
+    throwIfAborted(request);
     const hit = this.byHash.get(requestHash(request));
     if (hit === undefined) {
       throw new ModelPortError('no_response', 'RecordedModel: pedido não está na gravação');

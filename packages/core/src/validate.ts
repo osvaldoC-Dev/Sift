@@ -1,5 +1,6 @@
 import { applyInto, InvariantError } from './apply';
 import { canonicalize } from './canonical';
+import { DEFAULT_SOURCE_KINDS, resolveKind, type SourceKinds } from './source';
 import type { BasisRule, BasisSpec, FieldDef, ProjectSchema, TransitionDef } from './schema';
 import { cloneState } from './state';
 import type {
@@ -93,6 +94,23 @@ function evalBasis(
   return undefined;
 }
 
+/**
+ * Data e hora ISO-8601 ESTRITA: AAAA-MM-DDTHH:MM:SS[.fff]Z ou com deslocamento ±HH:MM, com o calendário conferido
+ * (mês 1-12, dia dentro do mês, bissexto). Só sintaxe e aritmética: o núcleo nunca lê o relógio.
+ */
+const ISO_DATETIME = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-](\d{2}):(\d{2}))$/;
+export function isIsoDateTime(s: string): boolean {
+  const m = ISO_DATETIME.exec(s);
+  if (!m) return false;
+  const [year, month, day, hour, minute, second] = [m[1], m[2], m[3], m[4], m[5], m[6]].map(Number) as [number, number, number, number, number, number];
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  const dim = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1];
+  if (dim === undefined || day < 1 || day > dim) return false;
+  if (hour > 23 || minute > 59 || second > 59) return false;
+  if (m[8] !== undefined && (Number(m[8]) > 23 || Number(m[9]) > 59)) return false;
+  return true;
+}
+
 // ---- atributos --------------------------------------------------------------------------------
 
 function checkAttributes(
@@ -125,6 +143,9 @@ function checkAttributes(
       case 'enum':
         ok = typeof v === 'string' && (d.values ?? []).includes(v);
         break;
+      case 'datetime':
+        ok = typeof v === 'string' && isIsoDateTime(v);
+        break;
     }
     if (!ok) report('invalid_attribute', `valor inválido para ${k}`);
   }
@@ -144,7 +165,12 @@ interface OpResult {
  * (uma operação pode referenciar itens criados antes dela no mesmo change) e calcula os campos
  * derivados: impacto, basisKind e transições explícitas.
  */
-export function analyzeChange(schema: ProjectSchema, state: State, change: Change): Analysis {
+export function analyzeChange(
+  schema: ProjectSchema,
+  state: State,
+  change: Change,
+  kinds: SourceKinds = DEFAULT_SOURCE_KINDS,
+): Analysis {
   const issues: Issue[] = [];
   const report = (code: IssueCode, message: string, opIndex?: number) =>
     issues.push({ code, message, opIndex });
@@ -182,11 +208,19 @@ export function analyzeChange(schema: ProjectSchema, state: State, change: Chang
     const rep = (code: IssueCode, message: string) => report(code, message, i);
 
     for (const ev of op.evidence) {
-      const ok =
-        HASH_RE.test(ev.contentHash) &&
-        Number.isInteger(ev.start) && Number.isInteger(ev.end) &&
-        ev.start >= 0 && ev.end > ev.start && ev.quote.length > 0;
-      if (!ok) rep('evidence_malformed', 'evidência malformada');
+      if (!HASH_RE.test(ev.contentHash)) {
+        rep('evidence_malformed', 'evidência malformada');
+      } else if (ev.kind === 'text') {
+        rep('evidence_malformed', "kind 'text' explícito: a evidência de texto não leva o campo kind");
+      } else {
+        const kind = resolveKind(ev, kinds);
+        if (kind === undefined) {
+          rep('evidence_malformed', `kind de fonte desconhecido: ${String(ev.kind)}`);
+        } else {
+          const bad = kind.checkShape(ev);
+          if (bad !== undefined) rep('evidence_malformed', bad);
+        }
+      }
       const v = ev.supportVerdict;
       if (v !== undefined && !VERDICTS.includes(v)) {
         rep('evidence_malformed', `supportVerdict inválido: ${String(v)}`);
@@ -362,8 +396,13 @@ export function analyzeChange(schema: ProjectSchema, state: State, change: Chang
 }
 
 /** Lista de problemas; vazia = válido. Os campos derivados do change devem bater com a análise. */
-export function validateChange(schema: ProjectSchema, state: State, change: Change): Issue[] {
-  const a = analyzeChange(schema, state, change);
+export function validateChange(
+  schema: ProjectSchema,
+  state: State,
+  change: Change,
+  kinds: SourceKinds = DEFAULT_SOURCE_KINDS,
+): Issue[] {
+  const a = analyzeChange(schema, state, change, kinds);
   const issues = [...a.issues];
   if (issues.length === 0 && (change.impact !== a.impact || change.basisKind !== a.basisKind)) {
     issues.push({
@@ -379,9 +418,10 @@ export function prepareChange(
   schema: ProjectSchema,
   state: State,
   draft: ChangeDraft,
+  kinds: SourceKinds = DEFAULT_SOURCE_KINDS,
 ): { change: Change; analysis: Analysis; issues: Issue[] } {
   const provisional: Change = { ...draft, impact: 'low', basisKind: 'none' };
-  const analysis = analyzeChange(schema, state, provisional);
+  const analysis = analyzeChange(schema, state, provisional, kinds);
   return {
     change: { ...draft, impact: analysis.impact, basisKind: analysis.basisKind },
     analysis,

@@ -1,0 +1,59 @@
+Cloudlane blog: The end of the monolith
+
+Every few years a technology arrives that changes how software gets built. Microservices are that technology, and the shift is already over.
+
+The numbers speak for themselves
+
+Microservices cut infrastructure bills by 40% for the average team. Every serious engineering team has already moved off the monolith. Once you do the same, you will never worry about scaling again. The only question left is how quickly you can get there.
+
+What a service mesh does for you
+
+A mesh takes the hard parts of running many services and handles them in one place. Cloudlane Mesh enables mutual TLS between services by default. Cloudlane Mesh 3.2, released in February, added automatic retries with exponential backoff.
+
+Getting started
+
+Most teams begin with a single service and grow from there. What would it take to go from three services to thirty? Less than you think.
+
+A word of caution
+
+In our experience, teams that split too early regret it. That is why we built tooling that lets you start small. Book a demo to see how it works for your stack.
+
+Why teams choose a mesh
+
+Running one service is easy. Running dozens means every team solves the same problems: encryption, retries, timeouts and observability. A mesh moves those concerns out of application code and into the platform, so developers can focus on the features customers see.
+
+Customer stories
+
+A payments company told us the move to a mesh was the best decision their platform team made. A logistics startup said it finally felt in control of its traffic. We have many more stories like these, and we love sharing them.
+
+Pricing
+
+Cloudlane Mesh is free for up to ten services. Beyond that, pricing depends on the number of nodes, and our sales team will build a plan around your needs. There is no long-term contract on any plan.
+
+Final thoughts
+
+The monolith had a great run. It is time to let it go.
+
+Observability that just works
+
+Once your services talk to each other through the mesh, every request gets a trace identifier automatically. Dashboards show where time is spent without anyone adding code. Our customers tell us that their on-call engineers sleep better, and we are proud of that.
+
+Built for developers
+
+The command line tool installs in a minute. Policies are written in plain files that live next to your code. Changes roll out gradually, and you can pause a rollout from your phone. Our documentation includes recipes for the most common setups, from a first service to a multi-region deployment.
+
+What our community says
+
+Our community forum has thousands of members who share configurations and answer each other's questions. Every month we host a live session where our engineers walk through a real migration. The recordings are available to everyone, and the schedule is posted on the community page.
+
+Roadmap
+
+We are working on a new dashboard, better integration with popular build tools and a simpler installer. We cannot promise dates, but we publish our plans openly and update them as they change. Feature requests from the forum are reviewed every two weeks by the product team.
+
+Get in touch
+
+If you would like to talk to someone about your architecture, our solutions team is happy to arrange a call. Tell us a little about what you run today, and we will suggest a way to start that fits your size. No preparation is needed, and the first conversation is always free.
+
+Support options
+
+Every plan includes email support during business hours. Teams that want faster answers can add round-the-clock support, which includes a named contact and a quarterly review of your setup with one of our engineers.

@@ -42,13 +42,31 @@ export type Origin = { kind: 'human'; actorId: UserId } | AgentOrigin;
  */
 export type SupportVerdict = 'full' | 'partial' | 'none' | 'unchecked';
 
-export interface EvidenceRef {
+/**
+ * Evidência: trecho de um snapshot imutável (`contentHash`). Duas formas:
+ *  - TEXTO (a forma de sempre, SEM campo `kind`): offsets em code points + citação literal;
+ *  - LOCALIZADA (`kind` diferente de 'text'): o localizador depende do tipo de fonte (ex.: linhas de um
+ *    arquivo). `kind: 'text'` escrito explicitamente é recusado, para só existir UMA forma canônica da
+ *    evidência de texto (os hashes já gravados não mudam).
+ */
+export interface EvidenceBase {
   contentHash: Hash;
+  supportVerdict?: SupportVerdict; // só origem de agente
+}
+export interface TextEvidence extends EvidenceBase {
+  kind?: undefined;
   start: number; // code points, inclusivo
   end: number; // code points, exclusivo
   quote: string;
-  supportVerdict?: SupportVerdict; // só origem de agente
 }
+export type Locator = Record<string, string | number | boolean>;
+export interface LocatedEvidence extends EvidenceBase {
+  kind: string;
+  locator: Locator;
+  /** Texto do trecho, quando o tipo de fonte tem texto. Fica de fora para tipos sem texto. */
+  quote?: string;
+}
+export type EvidenceRef = TextEvidence | LocatedEvidence;
 
 export interface Justification {
   statement: string;

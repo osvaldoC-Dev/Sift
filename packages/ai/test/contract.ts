@@ -67,6 +67,23 @@ export function runModelPortContract(name: string, make: (steps: ContractStep[])
       expect(JSON.stringify(request)).toBe(snapshot);
     });
 
+    it('signal já abortado: rejeita com aborted, sem consumir o roteiro', async () => {
+      const model = make([a]);
+      const ctl = new AbortController();
+      ctl.abort();
+      const err = await model.generate({ ...a.request, signal: ctl.signal }).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ModelPortError);
+      expect((err as ModelPortError).code).toBe('aborted');
+      expect((await model.generate(a.request)).output).toEqual(a.response.output);
+    });
+
+    it('signal não abortado não muda a resposta', async () => {
+      const model = make([a]);
+      const ctl = new AbortController();
+      const r = await model.generate({ ...a.request, signal: ctl.signal });
+      expect(r.output).toEqual(a.response.output);
+    });
+
     it('a resposta é JSON puro e independente do roteiro (mutar o resultado não vaza)', async () => {
       const model = make([b]);
       const r = await model.generate(b.request);

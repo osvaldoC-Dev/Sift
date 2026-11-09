@@ -8,6 +8,7 @@ import type { ModelUsage } from './ports';
  */
 
 export const DISCARD_REASONS = [
+  'malformed_item', // o item da saída do modelo não tem a forma exigida (campo a mais, tipo fora da lista...)
   'invalid_citation', // o trecho citado não existe na fonte (ou é ambíguo)
   'not_supported', // o trecho existe, mas não sustenta a afirmação (supportVerdict none)
   'duplicate', // já existe no estado, ou repete outro change da mesma execução
@@ -23,6 +24,7 @@ interface DiscardBase {
 }
 
 export type DiscardedItem =
+  | (DiscardBase & { reason: 'malformed_item' })
   | (DiscardBase & {
       reason: 'invalid_citation';
       quote: string;
@@ -56,4 +58,14 @@ export interface RunReport {
   kept: number;
   discarded: DiscardedItem[];
   coverage: SourceCoverage[];
+  /**
+   * Refs cuja citação aparece mais de uma vez na passagem enviada: o pipeline usou a PRIMEIRA ocorrência.
+   * Pendência de interface (OPEN-DECISIONS, seção 5); nada no log muda por isso.
+   */
+  ambiguousCitations: string[];
+  /**
+   * Refs mantidos com `supportVerdict: 'unchecked'` porque a saída do verificador veio fora do schema.
+   * Esses itens estão em `kept`; o humano os revisa (não entram em aceite provisório nem em lote).
+   */
+  uncheckedByVerifier: { ref: string; detail: string }[];
 }

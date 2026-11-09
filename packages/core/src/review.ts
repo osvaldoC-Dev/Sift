@@ -1,6 +1,7 @@
+import { canonicalize } from './canonical';
 import type { ProjectSchema } from './schema';
 import type { Analysis } from './validate';
-import type { Change, ChangeStatus, Decision, ReviewEvent, Reviewer, State } from './types';
+import type { Change, ChangeStatus, Decision, EvidenceRef, Operation, ReviewEvent, Reviewer, State } from './types';
 
 /** Máquina de estados da proposta. undefined = transição inválida. */
 export function nextStatus(current: ChangeStatus, decision: Decision | 'stale'): ChangeStatus | undefined {
@@ -154,4 +155,51 @@ export function checkDecision(schema: ProjectSchema, input: DecisionInput): Deci
     );
   }
   return issues;
+}
+
+
+/** Identidade de uma evidência: ela inteira, MENOS o veredito (que é o que a revisão herda ou rebaixa). */
+const evidenceKey = (e: EvidenceRef): string => {
+  const { supportVerdict: _verdict, ...identity } = e;
+  return canonicalize(identity);
+};
+/** A parte da operação que AFIRMA algo: tudo menos a evidência. */
+const assertionKey = (op: Operation): string => {
+  const { evidence: _ignored, ...rest } = op;
+  return canonicalize(rest);
+};
+
+/**
+ * Operações efetivas de um `accept_edited` de change de agente. O `supportVerdict` é um fato sobre o par
+ * (afirmação, trecho) COMO O VERIFICADOR O VIU; depois de uma edição humana, o log não pode afirmar uma
+ * checagem que nunca ocorreu sobre o texto final. Regra, por operação editada:
+ *  - se a parte que afirma (tudo menos a evidência) é idêntica a alguma operação original ainda não
+ *    casada, cada evidência que também existia nela herda o veredito ORIGINAL (ou fica sem veredito, se
+ *    o original não tinha); qualquer evidência nova ou diferente vira 'unchecked';
+ *  - se a parte que afirma mudou, toda a evidência dela vira 'unchecked'.
+ * Vereditos que o humano tenha escrito à mão nas operações editadas são IGNORADOS. Função pura: não
+ * altera as entradas. Para origem humana devolve as operações editadas sem mexer (a validação recusa
+ * veredito humano).
+ */
+export function reconcileEditedOperations(
+  origin: Change['origin'],
+  original: readonly Operation[],
+  edited: readonly Operation[],
+): Operation[] {
+  if (origin.kind !== 'agent') return edited.map((o) => ({ ...o }));
+  const pool = original.map((op) => ({ op, key: assertionKey(op), used: false }));
+  return edited.map((op) => {
+    const key = assertionKey(op);
+    const match = pool.find((p) => !p.used && p.key === key);
+    if (match) match.used = true;
+    const known = new Map<string, EvidenceRef>();
+    if (match) for (const e of match.op.evidence) known.set(evidenceKey(e), e);
+    const evidence = op.evidence.map((e): EvidenceRef => {
+      const { supportVerdict: _typed, ...bare } = e;
+      const before = known.get(evidenceKey(e));
+      if (!before) return { ...bare, supportVerdict: 'unchecked' };
+      return before.supportVerdict === undefined ? bare : { ...bare, supportVerdict: before.supportVerdict };
+    });
+    return { ...op, evidence } as Operation;
+  });
 }

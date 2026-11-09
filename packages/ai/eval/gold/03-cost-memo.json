@@ -1,0 +1,101 @@
+{
+  "source": "03-cost-memo",
+  "file": "sources/03-cost-memo.txt",
+  "items": [
+    {
+      "key": "cost.current-410k",
+      "type": "claim",
+      "statement": "Annual infrastructure cost of the monolith is $410,000.",
+      "quotes": [
+        "Annual infrastructure cost of the current monolith is $410,000."
+      ]
+    },
+    {
+      "key": "cost.no-reduction-year-one",
+      "type": "claim",
+      "statement": "The migration will not reduce infrastructure cost in year one.",
+      "quotes": [
+        "The migration will not reduce infrastructure cost in year one."
+      ],
+      "note": "Negation: a model that drops the \"not\" inverts the meaning."
+    },
+    {
+      "key": "cost.year-one-455k",
+      "type": "claim",
+      "statement": "Projected year-one infrastructure cost is $455,000.",
+      "quotes": [
+        "Projected infrastructure cost in year one is $455,000, up from $410,000."
+      ]
+    },
+    {
+      "key": "cost.reduce-by-year-three",
+      "type": "assumption",
+      "statement": "The migration is likely to reduce cost by year three if utilisation improves.",
+      "quotes": [
+        "The migration is likely to reduce infrastructure cost by year three, assuming utilization improves."
+      ]
+    },
+    {
+      "key": "cost.five-services-q3",
+      "type": "assumption",
+      "statement": "The team will operate five services in production by the end of Q3.",
+      "quotes": [
+        "Planning assumes the team will operate five services in production by the end of Q3."
+      ]
+    },
+    {
+      "key": "cost.transfer-price",
+      "type": "claim",
+      "statement": "Traffic between services is billed at $0.02 per GB.",
+      "quotes": [
+        "Traffic between services is billed at $0.02 per GB."
+      ]
+    },
+    {
+      "key": "cost.payload-2048kb",
+      "type": "claim",
+      "statement": "The median checkout-to-billing payload is 2048 KB.",
+      "quotes": [
+        "The median payload between checkout and billing is 2048 KB"
+      ]
+    },
+    {
+      "key": "cost.billing-fewest-deps",
+      "type": "claim",
+      "statement": "Billing is the module with the fewest dependencies and the lowest extraction cost.",
+      "quotes": [
+        "Billing is the module with the fewest dependencies, so it carries the lowest extraction cost."
+      ]
+    },
+    {
+      "key": "cost.reserved-question",
+      "type": "question",
+      "statement": "Do reserved-instance discounts survive the split?",
+      "quotes": [
+        "Whether reserved-instance discounts survive the split has not been checked with the vendor."
+      ]
+    },
+    {
+      "key": "cost.network-tooling-rise",
+      "type": "claim",
+      "statement": "The cost table lists Network and tooling at $70,000 and $81,000 (columns: today and year one).",
+      "quotes": [
+        "| Network and tooling | $70,000 | $81,000 |"
+      ],
+      "note": "A row of a table written as plain text, with pipe characters. The citation must keep the pipes and spaces exactly. The row alone does not show the column headers, so a support check that sees only the claim and this quote cannot confirm which column is today and which is year one: the best expected verdict is partial, and a verdict of full would be over-trust."
+    }
+  ],
+  "traps": [
+    {
+      "key": "cost.trap-hedge-as-fact",
+      "types": [
+        "claim"
+      ],
+      "quotes": [
+        "The migration is likely to reduce infrastructure cost by year three, assuming utilization improves."
+      ],
+      "reason": "A hedged, conditional statement turned into an unconditional claim."
+    }
+  ],
+  "injections": []
+}

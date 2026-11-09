@@ -30,9 +30,6 @@ métricas (taxa de reprocessamento).
 
 ## 3. Dúvidas abertas do 3.0
 
-- **Editar um item muda o texto, mas o veredito continua `full`.** Em `accept_edited`, o humano pode alterar o
-  conteúdo de um item mantendo a evidência com `supportVerdict: 'full'`, que foi dado para o texto original.
-  Opção a avaliar: rebaixar o veredito para `unchecked` quando o conteúdo é editado. Não implementado.
 - **Humano com veredito é recusado, não ignorado** (escolha do 3.0): um veredito em evidência humana afirmaria uma
   checagem que nunca ocorreu. Reversível: trocar por "ignorar" é uma linha.
 - **Ausente = `unchecked`**, e não um erro de validação, para não invalidar propostas antigas. O pipeline do 3.2
@@ -47,3 +44,158 @@ métricas (taxa de reprocessamento).
   `provider_error`). Erros de rede, limite de uso e saída ilegível entram junto com os adaptadores reais.
 - **Os testes com o `vitest` real** ainda não rodaram neste ambiente (registro npm bloqueado): os números abaixo
   vêm de uma execução com shims descartáveis, e a conferência final é a sua (`npm test`).
+
+## 4. Dúvidas abertas do 3.1
+
+- **Limite de casamento em 50% do trecho do gabarito** é um valor inicial. Mais baixo aceita citações vagas;
+  mais alto rejeita citações que pegam o essencial mas não a frase inteira. Calibrar com a primeira execução
+  real, olhando os `unjudged`.
+- **O gabarito não lista tudo o que é correto.** Previsão válida fora do gabarito vira `unjudged` (precisa de
+  uma pessoa), e a precisão é só um piso. Se o volume de `unjudged` for alto, a solução é ampliar o gabarito,
+  não afrouxar o casamento.
+- **O gabarito foi escrito por quem conhece o sistema.** Pode estar enviesado a favor do pipeline. Deve ser lido
+  e contestado pelo dono do projeto antes da primeira execução ao vivo.
+- **Relações (contradição, quase-contradição, duplicata) só são validadas**, não pontuadas: a pontuação delas é
+  da Fase B. Única exceção, informativa: `duplicatePairsPredicted` conta os pares de `duplicates` cujos dois
+  lados a previsão acertou (o Extrair emitiu redundância conhecida). Não é erro nem regressão; quem remove a
+  duplicata é outra etapa.
+- **Citação ambígua** (trecho que aparece mais de uma vez na fonte) é só contada (`ambiguousCitations`) e
+  casa com qualquer ocorrência. Decisão de padrão do 3.1.1, a confirmar: se o núcleo deve recusá-la quando a
+  posição importa, isso é do Marco 3.2 (validação de citação do Extrair), não do harness.
+- **`compare()`**: "sem julgamento", excesso de previsões e duplicatas conhecidas emitidas são informativos
+  (`mudou`, nunca `piorou`). Só recall, citação válida, piso de precisão, armadilhas, injeções, citações
+  inválidas e sem citação entram em `regressions`.
+- **Limites de aprovação** (precisão, recall etc.) não estão no código e precisam ser definidos antes da
+  primeira execução ao vivo.
+- **Fontes só em inglês.** Falta uma ou duas em português na segunda rodada, com fontes reais.
+- **O `eval/` lê arquivos** (`load.ts`) e por isso fica fora de `ai/src`, onde o teste de arquitetura proíbe
+  sistema de arquivos. O `score.ts` e o `report.ts` são puros.
+
+## 5. Contrato de fonte (3.2a)
+
+- **Citação ambígua: PENDENTE DE INTERFACE.** Trecho que aparece mais de uma vez na fonte: o `locate` devolve
+  todas as ocorrências; o pipeline (3.2b) usa a primeira e marca `ambiguousCitation` no relatório da rodada.
+  Ainda não decidido: se o núcleo deve recusar quando a posição importa. Nada no log muda por isso.
+- **Dedupe do Extrair:** mesmo tipo + cobertura de citação >= `DEDUPE_COVERAGE = 0.9` nos dois sentidos. É uma
+  constante nomeada, valor inicial; calibrar com a primeira rodada real (3.3).
+- **`getBytes` não declarado.** O `ContentReader` só lê texto. Tipos de fonte binários (PDF, imagem) exigirão
+  uma segunda porta de leitura; fica para quando houver o primeiro tipo binário.
+- **Metadados de código (commit, caminho) NÃO SÃO VERIFICADOS.** Só o hash do arquivo prova a evidência.
+- **`unknown_kind` e `locator_invalid`** são razões tipadas de `verifyEvidence`/`validate`. Evidência de texto
+  não tem campo `kind` (forma canônica e hashes antigos intactos); `kind: 'text'` explícito é recusado.
+  Protegido por `golden-hashes.test.ts`.
+- **Hash da evidência é conferido contra o texto guardado como está** (o repositório guarda texto já
+  normalizado). Divergência = `hash_mismatch`.
+- **Tipo de campo `datetime`** (ISO-8601 estrito, com conferência de calendário, sem relógio). `capturedAt` é
+  declarado pelo usuário, não verificado, entra no hash e nunca é usado em lógica. O momento confiável é o
+  `at` do evento do log (porta de relógio).
+- **research@1 ganhou campos opcionais** (`originType`, `originLabel`, `originRunId`, `capturedAt`) sem
+  mudar a versão (aditivo). Se algum dia forem obrigatórios, é research@2. `originType` é opcional no schema
+  mas obrigatório na camada que cria a fonte.
+- **Limites herdados:** a conferência real com `npm test` e `tsc` é do usuário; as constantes do teste dourado
+  foram geradas fora do ambiente real e precisam ser confirmadas lá.
+
+## 6. Pipeline Extrair (3.2b)
+
+- **Item com campo a mais na saída do modelo (id, start, end...)** descarta só o item (`malformed_item`). Só a
+  forma errada da saída inteira descarta a execução. A decisão aprovada diz "item inválido descarta só o item";
+  a classificação de "campo a mais" como item inválido é minha leitura. A confirmar com o Claude 1.
+- **Saída do verificador fora do schema NÃO descarta a execução (v2, decisão do Claude 1):** o item é mantido com
+  `supportVerdict: 'unchecked'` (o núcleo bloqueia aceite provisório e lote até revisão humana) e o relatório
+  lista o caso em `uncheckedByVerifier` (`ref` + motivo). A execução só é descartada (erro tipado, `retryable`)
+  quando o PROVEDOR falha. Item `unchecked` continua dentro de `kept` e fora de `discarded`.
+- **O pipeline NÃO tem filtro de injeção.** Nenhum passo procura ou remove instruções dentro da fonte. A defesa é
+  em camadas: (1) o delimitador (a fonte entra como dado, num bloco que ela mesma não contém); (2) o verificador
+  vê só afirmação + citação, nunca a fonte; (3) `decision` é sempre provisória, impacto alto, fora de lote;
+  (4) o eval mede injeções obedecidas/citadas (limite 0); (5) revisão humana de tudo. Nenhuma camada sozinha
+  garante nada; a medição real vem da primeira rodada ao vivo (3.3).
+- **Citação normalizada em NFC antes de procurar.** Uma citação decomposta (e + U+0301) casa e é gravada
+  composta. Letra trocada, espaço diferente ou hifenização refeita continuam sem casar.
+- **Ambiguidade só é detectada dentro da passagem.** O mesmo trecho em duas passagens diferentes não é marcado.
+- **Sem relação `derived_from` item -> fonte e sem `changeSetId`.** Cada item é um Change separado. Agrupar em
+  change sets (limite 12) e ligar à fonte fica para o runner (3.3) ou a camada de revisão.
+- **Delimitador:** em vez de alterar o texto da fonte, o pipeline escolhe um sufixo de delimitador que a fonte
+  não contém (o texto fica intacto, para a citação continuar existindo nele).
+- **Corte duro:** uma frase maior que o limite da passagem é cortada no limite; uma citação que cruze esse corte
+  é descartada como inválida. Com o limite padrão (6000) e com 1200 e 700, nenhuma citação do gabarito cruza.
+- **Só um modelo para extrair e verificar** nesta etapa (a porta é a mesma). A origem grava
+  `verifierModel` em `params`. Usar modelos diferentes é decisão do 3.3.
+- **Limite padrão de passagem: 6000 code points.** Valor inicial, não calibrado com modelo real.
+
+## 7. API (`packages/api`, incremento 1)
+
+Pontos para o Claude 1 (contrato 0.2.1) marcados com **[C1]**.
+
+- **[C1] No research@1 só a PERGUNTA vai a lote.** `batchEligibleImpact` é `['low']` e a afirmação tem impacto
+  médio; decisão e suposição, alto. O contrato e os exemplos tratam a afirmação como elegível. A API segue o
+  núcleo (nada reimplementado), então `canBatchAccept` de uma afirmação é recusado. Decidir: abrir o impacto
+  médio no schema (decisão de produto) ou ajustar o que a interface espera do lote.
+- **[C1] `BlockCode` não tem um código genérico para "lote recusado pela estrutura".** Traduzi `batch_not_eligible`
+  do núcleo para `decision_individual_only` (ou `relation_touches_adopted` quando há relação). Para uma afirmação
+  isso é enganoso. Pedir `needs_individual_review` (ou similar) na próxima versão do contrato.
+- **[C1] `provisional`:** não está definido. Calculei "o item é criado no status provisório do seu tipo"
+  (`provisionalStatus` do schema). No research@1 isso dá `true` para afirmação, suposição e decisão, e `false`
+  para pergunta. O exemplo `proposalOk` (afirmação, `provisional: false`) não bate com essa leitura.
+- **[C1] Fonte de IA:** `originType: 'ai'` é recusado com `invalid_request`, porque o núcleo exige
+  `originRunId` numa fonte de IA e o `CaptureSourceRequest` não o traz. Pedir o campo opcional ao contrato.
+- **[C1] `LogEntry.action`:** o histórico da interface é a cadeia de AUDITORIA da API (captura, proposta,
+  rejeição, aceite, desfazer), não a cadeia do núcleo (que só tem o aplicado e não tem rejeição). O hash usa só
+  campos que o cliente recebe, então se confere a partir da lista: `sha256((prevHash ?? '') + '\n' +
+  canonicalize({seq, action, targetId, at}))`. A entrada guarda por dentro a versão do núcleo (`coreVersion`).
+- **[C1] Falta schema de resposta** para `getSource` (reuso `captureSource`) e `listProposals` (valido
+  `ProposalView.array()`). Pedir as chaves em `ResponseSchemas`.
+- **[C1] `StateView.relations.kind`** é `contradiction|near_miss|duplicate`, e o research@1 tem outros nomes de
+  relação (`supports`, `challenges`...). A API só devolve relações cujo tipo é exatamente um dos três. Nenhuma
+  relação é criada pelo pipeline hoje, então o estado sai sem relações até isso ser definido.
+- **[C1] `source_too_large`** nunca é produzido: a captura recusa texto acima do limite (`invalid_request`) e o
+  pipeline fatia o que couber.
+- **[C1] `devDependencies` do contrato** pedem `vitest ^2.0.0` e o repositório usa `^3.2.0`. Pedir `^3.2.0` (ou
+  nenhuma) para o `npm install` não trazer duas cópias.
+- **Falha de extração responde HTTP 200** com `ExtractionResponse` `ok:false` (a união do contrato existe para
+  carregar a falha no corpo). Erro do pedido (`not_found`, `invalid_request`...) usa 4xx; erro interno, 500.
+  `provider_failure` cobre também `no_response` e `aborted` (estes sem `retryable`).
+- **`not_allowed`, `stale` e `conflict` respondem 409; `invalid_request`, 400; `not_found`, 404.**
+- **Elegibilidade:** `canAccept`/`canBatchAccept` vêm de `staleReasons`, `analyzeChange` e `checkDecision` do
+  núcleo, com um revisor humano de sonda; a API só traduz os códigos. Duas regras são do contrato e não do
+  núcleo: citação ambígua nunca vai a lote; análise do núcleo com problemas no estado atual vira `stale`.
+- **A API não cria projetos.** Os projetos existem na configuração do armazém; id desconhecido é `not_found`.
+- **Sem autenticação nesta fase.** A pessoa das mudanças humanas é `actorId` da configuração (`local-user`).
+- **Texto da fonte:** `SourceView.text` é o instantâneo NORMALIZADO (NFC) que o núcleo guarda e sobre o qual os
+  deslocamentos valem. Se o usuário colar texto decomposto, o texto devolvido difere do enviado.
+- **Extrair duas vezes a mesma fonte** cria propostas pendentes duplicadas: o pipeline deduplica contra o estado
+  aplicado e contra a própria execução, não contra propostas pendentes de outra execução.
+- **`originLabel` de uma proposta** é o modelo que a gerou; o `originLabel` da captura é guardado na fonte e não
+  aparece em nenhuma resposta (o contrato não o devolve).
+- **`Store` e o Postgres (1b):** a interface importa só TIPOS (`Outcome`, `ReviewInput`) de `@sift/core/testing`;
+  promover esses tipos ao núcleo público entra no 1b. A atomicidade entre núcleo e auditoria é da
+  implementação durável (uma transação por método de escrita da API). A fila de escrita por projeto
+  (`locked`) é morta pelo teste `write-queue.test.ts` (mutação X10), com latência simulada.
+- **Rotas `decide`, `batchAccept` e `undo`** respondem 500 `internal` ("incremento 2") até o próximo zip.
+
+### 7.1 Escritas concorrentes e o Postgres (1b)
+
+- **Critério obrigatório antes do Postgres:** `test/write-queue.test.ts` tem de passar contra o armazém durável,
+  trocando só `makeStore` em `store-factory.ts` e embrulhando-o com `withLatency`.
+- **[1b] A fila `locked` protege UM processo.** É um `Map` em memória: com duas instâncias da API, ou um reinício a
+  meio de um pedido, não protege nada. Com Postgres a proteção real tem de estar no armazém: versão otimista
+  (`baseVersion` contra a versão atual, na mesma transação da escrita) ou bloqueio por projeto
+  (`pg_advisory_xact_lock(hash(projectId))`). `locked` passa a ser otimização, não garantia.
+- **[1b] Critério a acrescentar para o Postgres:** duas escritas com a mesma `baseVersion`, feitas por DUAS
+  instâncias de `Store` sobre o mesmo banco, em paralelo, sobre o mesmo elemento: uma passa, a outra devolve
+  `conflict`, e a perdedora não deixa rastro (nem no núcleo nem na auditoria). Em memória só há uma instância, por
+  isso o teste atual (`armazém: duas escritas com a mesma baseVersion...`) cobre a regra, mas não a multi-instância;
+  `makeStore` deverá aceitar criar um segundo `Store` sobre o mesmo banco. O conflito é por elemento (regra do
+  núcleo: `staleReasons`), não por versão global: duas escritas em elementos diferentes passam as duas.
+- **[C1/Osvaldo] A extração segura a fila durante a chamada ao modelo.** Hoje `startExtraction` corre inteira
+  dentro de `locked`; com o Kimi uma chamada pode durar minutos e bloquear TODAS as escritas do projeto (capturas,
+  decisões, desfazer). Duas opções, decisão pendente (recomendação minha: B):
+  - **A.** Manter tudo sob a fila e pôr um tempo limite na chamada ao modelo (por pedido, no `ModelPort`).
+    Simples; ainda bloqueia o projeto até o limite.
+  - **B.** Duas fases: ler (fonte, estado) sem travar; chamar o modelo sem travar; travar só para propor as
+    mudanças. Como a extração parte de um `baseVersion` lido antes, a fase final já trata o que mudou: o núcleo marca
+    como `stale` as propostas que ficaram obsoletas, e a idempotência (`runId:sourceId:ref`) protege contra
+    repetição. Custo: uma proposta pode nascer já `stale`; a UI do 3.4 mostra isso.
+  Nenhuma das duas foi implementada.
+- **Todas as rotas de escrita passam por `locked`:** `captureSource` e `startExtraction` hoje; `decide`,
+  `batchAccept` e `undo` entram no incremento 2 com testes concorrentes (duas decisões na mesma proposta; lote
+  concorrente com decisão individual; `undo` concorrente com captura nova).

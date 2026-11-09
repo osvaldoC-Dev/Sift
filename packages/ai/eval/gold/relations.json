@@ -1,0 +1,76 @@
+{
+  "contradictions": [
+    {
+      "a": "arch.billing-db-private",
+      "b": "pm.reporting-reads-billing",
+      "note": "Report says no other module reads billing tables; post-mortem found the reporting module reading them directly."
+    },
+    {
+      "a": "cost.five-services-q3",
+      "b": "cap.three-services-max",
+      "note": "The cost plan assumes five services; the on-call rotation supports at most three."
+    },
+    {
+      "a": "cost.five-services-q3",
+      "b": "cap.staffing-not-five",
+      "note": "The capacity memo says the plan of five services is not supported by staffing."
+    },
+    {
+      "a": "dec.five-services-q3",
+      "b": "cap.three-services-max",
+      "note": "The decision log commits to five services by the end of Q3; the capacity memo says the on-call rotation supports at most three."
+    },
+    {
+      "a": "dec.five-services-q3",
+      "b": "cap.staffing-not-five",
+      "note": "The decision log commits to five services by the end of Q3; the capacity memo says current staffing does not support running five."
+    }
+  ],
+  "near_misses": [
+    {
+      "a": "arch.median-latency-180",
+      "b": "pm.p95-rose",
+      "note": "Median vs 95th percentile: different statistics, no conflict."
+    },
+    {
+      "a": "arch.payload-2mb",
+      "b": "cost.payload-2048kb",
+      "note": "The same quantity in different units (2 MB = 2048 KB)."
+    },
+    {
+      "a": "cost.no-reduction-year-one",
+      "b": "cost.reduce-by-year-three",
+      "note": "Different time horizons: no reduction in year one, a likely reduction by year three."
+    },
+    {
+      "a": "cap.three-services-max",
+      "b": "cap.fourth-possible",
+      "note": "The fourth service is conditional on hiring; the current limit stays three."
+    },
+    {
+      "a": "arch.billing-least-coupled",
+      "b": "cost.billing-fewest-deps",
+      "note": "Similar but not the same claim: the report says billing is the least coupled module; the cost memo says it has the fewest dependencies and adds that it carries the lowest extraction cost. A linker that calls them duplicates is wrong."
+    },
+    {
+      "a": "arch.session-hidden-deps",
+      "b": "faq.session-store-hides-deps",
+      "note": "A specific case (checkout and account management) and the general statement it illustrates (modules that look independent). They support each other but are not the same claim."
+    },
+    {
+      "a": "dec.latency-budget-50ms",
+      "b": "pm.p95-rose",
+      "note": "A 50 ms budget per call between services versus a p95 of 484 ms for the whole checkout flow: different scopes, no conflict."
+    }
+  ],
+  "duplicates": [
+    [
+      "pm.rollback-40min",
+      "pm.latency-normal-40min"
+    ],
+    [
+      "arch.payload-2mb",
+      "cost.payload-2048kb"
+    ]
+  ]
+}

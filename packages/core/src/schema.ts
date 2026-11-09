@@ -18,7 +18,7 @@ export interface BasisSpec {
   any?: BasisRule;
 }
 export interface FieldDef {
-  type: 'string' | 'text' | 'number' | 'boolean' | 'enum';
+  type: 'string' | 'text' | 'number' | 'boolean' | 'enum' | 'datetime';
   required?: boolean;
   values?: string[];
 }
@@ -78,7 +78,7 @@ const BasisSpecZ = z
   .strict();
 const FieldDefZ = z
   .object({
-    type: z.enum(['string', 'text', 'number', 'boolean', 'enum']),
+    type: z.enum(['string', 'text', 'number', 'boolean', 'enum', 'datetime']),
     required: z.boolean().optional(),
     values: z.array(z.string()).optional(),
   })

@@ -1,0 +1,63 @@
+Team capacity memo: can we operate more services?
+
+From: engineering manager, order platform.
+
+Context
+
+Leadership asked whether the order platform team can take on additional production services during the migration. This memo describes the current on-call and skills picture.
+
+On-call
+
+The current on-call rotation can support at most three services in production. The rotation has eight engineers, and each engineer is on call one week in eight. Adding services without adding people increases the pages each engineer receives.
+
+Staffing
+
+The current staffing does not support running five services by the end of Q3. We may be able to add a fourth service if two engineers join in the second half of the year.
+
+Skills
+
+Four of the eight engineers have operated a service with an independent deployment pipeline before. Training the remaining four is expected to take about six weeks. Nobody on the team has run a distributed trace in production.
+
+Platform support
+
+It is unclear whether the platform team will lend an engineer during the first extraction. We have asked but have not received an answer.
+
+Next step
+
+We will revisit these numbers after the first extraction and report back to leadership.
+
+Rotation details
+
+The rotation currently covers business hours plus a weekend schedule. Out-of-hours pages averaged eleven per month over the last two quarters. About a third of them were caused by a single flaky batch job that predates the migration.
+
+Hiring
+
+Two requisitions are open for site reliability engineers. The recruiting team estimates ten to fourteen weeks from posting to start date for this role. Neither requisition has an approved start date for a candidate yet.
+
+Training
+
+The six-week estimate assumes a pairing programme in which each trainee shadows an experienced engineer for the first service extraction. It does not include time for a formal course. The manager would prefer to schedule training outside the release freeze at the end of each quarter.
+
+Risks
+
+If the platform team cannot provide a shared pipeline, each service will need its own, and the pairing programme would have to cover pipeline maintenance as well.
+
+On-call load in detail
+
+Over the last two quarters the rotation handled pages from four sources: the checkout service, the batch scheduler, the payment provider callbacks and the monitoring system itself. The checkout service accounts for the largest share of pages that required a human action. The manager keeps a spreadsheet of every page with its cause, its duration and whether it could have waited until morning.
+
+Handover practice
+
+The outgoing engineer writes a short handover note covering open incidents, any silenced alerts and any deployment planned for the coming week. The incoming engineer reads it before the Monday meeting. The manager reviews a sample of the notes each month and gives feedback to the authors.
+
+Tooling
+
+The team uses the shared paging tool, the shared dashboard and a private runbook wiki. The runbooks were written by the engineers who built each component, and several have not been read by anyone else. A review of the runbooks is planned for the quarter after the first extraction, with each engineer reading one runbook they did not write.
+
+Dependencies on other teams
+
+The order platform team depends on the platform team for the deployment pipeline and for the shared monitoring stack. It depends on the payments team for the provider integration. Requests to either team go through a weekly planning meeting, and urgent requests go through the on-call channel. The manager records response times to these requests and will include them in the next report.
+
+Communication plan
+
+The manager will present these figures at the monthly engineering review and will circulate the spreadsheet beforehand. Engineers who want to correct a figure can comment on the spreadsheet. The final version is sent to leadership with the next quarterly update.
