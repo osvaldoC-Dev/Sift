@@ -28,13 +28,17 @@ export const BlockCode = z.enum([
   "decision_individual_only",
   "relation_touches_adopted",
   "stale",
+  "needs_individual_review", // lote recusado pela estrutura do núcleo (impacto, transição, só justificação)
+  "core_refused", // o núcleo recusou por uma regra que o contrato não nomeia; nunca fazer a API lançar erro por isto
 ]);
 export const Availability = z.discriminatedUnion("ok", [
   z.object({ ok: z.literal(true) }).strict(),
   z.object({ ok: z.literal(false), code: BlockCode }).strict(),
 ]);
 
-/** Citação já verificada pelo servidor. `found` é a existência; não diz se sustenta a afirmação. */
+/** Citação já verificada pelo servidor. `found` é a existência; não diz se sustenta a afirmação.
+ *  `start`/`end`: pontos de código Unicode (não unidades UTF-16) sobre `SourceView.text`, que é o texto NORMALIZADO (NFC)
+ *  guardado pelo servidor. A interface mostra sempre o `SourceView.text` devolvido, nunca o que a pessoa colou. */
 export const Quote = z
   .object({
     text: z.string().min(1),
@@ -85,14 +89,16 @@ export const SourceView = z
   })
   .strict();
 
+export const Evidence = z
+  .object({ sourceId: Id, quote: z.string().min(1), start: z.number().int().min(0).nullable(), end: z.number().int().min(0).nullable() })
+  .strict();
 export const StateItem = z
-  .object({ id: Id, type: ItemType, text: z.string().min(1), sourceIds: z.array(Id) })
+  .object({ id: Id, type: ItemType, text: z.string().min(1), sourceIds: z.array(Id), evidence: z.array(Evidence) })
   .strict();
-export const StateRelation = z
-  .object({ id: Id, kind: z.enum(["contradiction", "near_miss", "duplicate"]), from: Id, to: Id })
-  .strict();
+/** `kind` é livre: os nomes de relação vêm do schema do projeto (dado), não do contrato. A interface mostra o que conhece e o resto em bruto. */
+export const StateRelation = z.object({ id: Id, kind: z.string().min(1), from: Id, to: Id }).strict();
 export const StateView = z
-  .object({ items: z.array(StateItem), relations: z.array(StateRelation), headHash: Hash.nullable() })
+  .object({ items: z.array(StateItem), relations: z.array(StateRelation), headHash: Hash.nullable(), canUndo: z.boolean() })
   .strict();
 
 export const LogEntry = z
@@ -114,9 +120,14 @@ export const CaptureSourceRequest = z
     text: z.string().min(1).max(2_000_000),
     originType: z.enum(["human", "ai"]).default("human"),
     originLabel: z.string().max(200).optional(),
+    originRunId: Id.optional(), // obrigatório quando originType = ai
     capturedAt: Iso.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((r, ctx) => {
+    if (r.originType === "ai" && r.originRunId === undefined) ctx.addIssue({ code: "custom", message: "fonte de IA exige originRunId" });
+    if (r.originType === "human" && r.originRunId !== undefined) ctx.addIssue({ code: "custom", message: "originRunId só existe em fontes de IA" });
+  });
 export const CaptureSourceResponse = z.object({ source: SourceView }).strict();
 
 export const StartExtractionRequest = z.object({ sourceId: Id }).strict();
@@ -150,6 +161,7 @@ export const BatchAcceptResponse = z
   .object({
     accepted: z.array(Id),
     refused: z.array(z.object({ id: Id, code: BlockCode }).strict()),
+    proposals: z.array(ProposalView), // propostas atualizadas (as aceites e as recusadas)
     log: z.array(LogEntry),
   })
   .strict();
@@ -188,11 +200,13 @@ export type DecisionRequest = z.infer<typeof DecisionRequest>;
 export type ExtractionResponse = z.infer<typeof ExtractionResponse>;
 
 /** Versão do contrato. Mudanças compatíveis (campos opcionais novos) sobem a minor; quebras sobem a major. */
-export const CONTRACT_VERSION = "0.2.1";
+export const CONTRACT_VERSION = "0.3.0";
 
 /** Schema de resposta de cada rota (para a API e o cliente validarem do mesmo modo). */
 export const ResponseSchemas = {
   captureSource: CaptureSourceResponse,
+  getSource: CaptureSourceResponse,
+  proposals: z.array(ProposalView),
   extraction: ExtractionResponse,
   decision: DecisionResponse,
   batchAccept: BatchAcceptResponse,

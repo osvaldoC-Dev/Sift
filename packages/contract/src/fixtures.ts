@@ -3,12 +3,12 @@
 import type { ProposalView } from "./index";
 
 export const H1 = "a".repeat(64), H2 = "b".repeat(64), H3 = "c".repeat(64);
-const base = { provisional: false, edited: false, verifierFailed: false, stale: false, runId: "run-1", originType: "ai" as const };
+const base = { provisional: true, edited: false, verifierFailed: false, stale: false, runId: "run-1", originType: "ai" as const };
 const ok = { ok: true as const };
 
 export const proposalOk: ProposalView = {
-  ...base, id: "p1", type: "claim", text: "O serviço de faturação é pouco acoplado.", support: "full", status: "pending",
-  quote: { text: "é pouco acoplado", sourceId: "s1", found: 1, start: 20, end: 36 },
+  ...base, id: "p1", type: "question", text: "Quem é o dono dos dados de faturação?", support: "full", status: "pending",
+  quote: { text: "dono dos dados", sourceId: "s1", found: 1, start: 20, end: 34 },
   canAccept: ok, canReject: ok, canBatchAccept: ok,
 };
 export const proposalMissingQuote: ProposalView = {
@@ -17,7 +17,7 @@ export const proposalMissingQuote: ProposalView = {
   canAccept: { ok: false, code: "citation_not_found" }, canReject: ok, canBatchAccept: { ok: false, code: "citation_not_found" },
 };
 export const proposalAmbiguous: ProposalView = {
-  ...base, id: "p3", type: "assumption", text: "A equipa mantém cinco pessoas.", support: "full", status: "pending",
+  ...base, id: "p3", type: "question", text: "A equipa mantém cinco pessoas?", support: "full", status: "pending",
   quote: { text: "a equipa mantém cinco pessoas", sourceId: "s1", found: 2, start: 10, end: 39 },
   canAccept: ok, canReject: ok, canBatchAccept: { ok: false, code: "citation_ambiguous" },
 };
@@ -45,9 +45,11 @@ export const responses = {
   extractionOk: { ok: true, runId: "run-1", proposals: allProposals, discarded: 1, ambiguousCitations: 1, modelId: "modelo-de-teste" },
   extractionProviderFailure: { ok: false, error: { code: "provider_failure", retryable: true, message: "tempo esgotado" } },
   decision: { proposal: proposalAccepted, log: logEntry },
-  batchAccept: { accepted: ["p1"], refused: [{ id: "p4", code: "decision_individual_only" }], log: [logEntry] },
+  batchAccept: { accepted: ["p1"], refused: [{ id: "p4", code: "decision_individual_only" }, { id: "p7", code: "needs_individual_review" }], proposals: [proposalAccepted, proposalDecision], log: [logEntry] },
   undo: { proposal: proposalOk, log: { ...logEntry, seq: 2, action: "undo" as const, prevHash: H1, hash: H3 } },
-  state: { items: [{ id: "i1", type: "claim", text: "Afirmação adotada.", sourceIds: ["s1"] }], relations: [], headHash: H1 },
+  state: { items: [{ id: "i1", type: "claim", text: "Afirmação adotada.", sourceIds: ["s1"], evidence: [{ sourceId: "s1", quote: "trecho citado", start: 4, end: 17 }] }], relations: [{ id: "r1", kind: "challenges", from: "i1", to: "i1b" }], headHash: H1, canUndo: true },
+  getSource: { source },
+  proposals: [proposalOk, proposalDecision],
   log: [logEntry],
   apiError: { code: "not_allowed", message: "A citação não existe na fonte.", block: "citation_not_found" },
 } as const;

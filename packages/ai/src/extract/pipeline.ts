@@ -5,12 +5,12 @@ import {
   type State, type TextEvidence,
 } from '@sift/core';
 import { ModelPortError, type ModelParams, type ModelPort, type ModelUsage } from '../ports';
-import type { DiscardedItem, RunReport } from '../report';
+import type { DiscardedItem, RunReport, VerifierDegraded } from '../report';
 import { chunkSource, DEFAULT_MAX_CHUNK_CHARS, type Chunk } from './chunk';
 import { isDuplicate, type DedupeKey } from './dedupe';
 import { parseExtraction, parseVerdict, type ParsedItem } from './output';
 import {
-  EXTRACT_PROMPT_VERSION, VERIFY_PROMPT_VERSION, buildExtractRequest, buildVerifyRequest, type ExtractedType,
+  EXTRACT_PROMPT_VERSION, ITEM_TYPES, VERIFY_PROMPT_VERSION, buildExtractRequest, buildVerifyRequest, type ExtractedType,
 } from './prompt';
 
 /**
@@ -43,15 +43,24 @@ export interface ExtractInput {
   source: { id: string; label: string; contentHash: Hash; text: string };
   params?: ModelParams;
   maxChunkChars?: number;
+  /**
+   * Fração (0..1) de itens `unchecked` por falha do verificador acima da qual o relatório leva `verifierDegraded`.
+   * Padrão 0,5. A execução continua `ok:true`; o aviso só impede que a degradação passe em silêncio.
+   */
+  verifierDegradedThreshold?: number;
   signal?: AbortSignal;
 }
+
+export const DEFAULT_VERIFIER_DEGRADED_THRESHOLD = 0.5;
 
 export type ExtractErrorCode =
   | 'schema_invalid' // a saída do modelo não tem a forma exigida: a execução inteira é descartada
   | 'provider_error' // falha do provedor
   | 'no_response' // só em modelos de teste
   | 'aborted' // o signal foi abortado
-  | 'source_hash_mismatch'; // o texto entregue não é o snapshot citado
+  | 'source_hash_mismatch' // o texto entregue não é o snapshot citado
+  | 'schema_unsupported' // o Project Schema não declara um tipo extraído ou o status com que a IA o cria
+  | 'cost_cap_exceeded'; // o teto de custo da execução foi atingido (adaptador real, 3.3)
 export interface ExtractError {
   code: ExtractErrorCode;
   /** O runner (3.3) tenta UMA nova execução quando verdadeiro. */
@@ -69,6 +78,8 @@ const RETRYABLE: Record<ExtractErrorCode, boolean> = {
   no_response: false,
   aborted: false,
   source_hash_mismatch: false,
+  schema_unsupported: false,
+  cost_cap_exceeded: false,
 };
 
 class Stop extends Error {
@@ -76,19 +87,43 @@ class Stop extends Error {
     super(error.detail);
   }
 }
-const stop = (code: ExtractErrorCode, detail: string): Stop => new Stop({ code, retryable: RETRYABLE[code], detail });
+const stop = (code: ExtractErrorCode, detail: string, retryable?: boolean): Stop =>
+  new Stop({ code, retryable: retryable ?? RETRYABLE[code], detail });
 
 const addUsage = (a: ModelUsage, b: ModelUsage): ModelUsage => ({
   inputTokens: a.inputTokens + b.inputTokens,
   outputTokens: a.outputTokens + b.outputTokens,
+  ...(a.cachedInputTokens !== undefined || b.cachedInputTokens !== undefined
+    ? { cachedInputTokens: (a.cachedInputTokens ?? 0) + (b.cachedInputTokens ?? 0) } : {}),
+  ...(a.estimated === true || b.estimated === true ? { estimated: true } : {}),
 });
 
-const STATUS_BY_TYPE: Record<ExtractedType, string> = {
-  claim: 'provisional',
-  assumption: 'provisional',
-  decision: 'provisional', // decisão só entra como provisória, com citação, e nunca vai em lote
-  question: 'open',
-};
+/**
+ * Status com que a IA cria cada tipo extraído, LIDO DO PROJECT SCHEMA (nada fixo no código):
+ *  - tipo com `provisionalStatus`: esse status (a IA só cria provisório);
+ *  - tipo sem ele (ex.: pergunta): `open` se a IA puder criar em `open`; senão o único status permitido à IA.
+ * Se o schema não declara o tipo, ou não dá um status inequívoco, devolve o motivo (erro tipado, nunca um
+ * `validation_refused` mudo no meio da execução).
+ */
+export function resolveCreationStatuses(
+  schema: ProjectSchema,
+): { ok: true; byType: Record<ExtractedType, string> } | { ok: false; detail: string } {
+  const byType = {} as Record<ExtractedType, string>;
+  for (const type of ITEM_TYPES) {
+    const def = schema.itemTypes[type];
+    if (def === undefined) return { ok: false, detail: `o schema ${schema.key}@${schema.version} não declara o tipo "${type}"` };
+    const allowed = def.creation.agent;
+    let status: string | undefined;
+    if (def.provisionalStatus !== undefined) status = def.provisionalStatus;
+    else if (allowed.includes('open')) status = 'open';
+    else if (allowed.length === 1) status = allowed[0];
+    if (status === undefined || !allowed.includes(status)) {
+      return { ok: false, detail: `o schema ${schema.key}@${schema.version} não dá à IA um status de criação inequívoco para "${type}"` };
+    }
+    byType[type] = status;
+  }
+  return { ok: true, byType };
+}
 
 interface Candidate {
   ref: string;
@@ -101,6 +136,8 @@ interface Candidate {
 
 export async function extractFromSource(deps: ExtractDeps, input: ExtractInput): Promise<ExtractResult> {
   const params: ModelParams = input.params ?? {};
+  const threshold = input.verifierDegradedThreshold ?? DEFAULT_VERIFIER_DEGRADED_THRESHOLD;
+  if (!(threshold >= 0 && threshold <= 1)) throw new RangeError('verifierDegradedThreshold deve estar entre 0 e 1');
   const signal = input.signal;
   const kinds = deps.kinds;
   const text = input.source.text;
@@ -114,10 +151,11 @@ export async function extractFromSource(deps: ExtractDeps, input: ExtractInput):
   const ambiguousCitations: string[] = [];
   const uncheckedByVerifier: { ref: string; detail: string }[] = [];
   const citedChunks = new Set<number>();
+  let verifierDegraded: VerifierDegraded | null = null;
 
   const baseReport = (kept: number): RunReport => ({
     runId: input.runId, baseVersion: input.baseVersion, model, promptVersion: EXTRACT_PROMPT_VERSION, usage,
-    modelChanges, kept, discarded, ambiguousCitations, uncheckedByVerifier,
+    modelChanges, kept, discarded, ambiguousCitations, uncheckedByVerifier, verifierDegraded,
     coverage: [{
       sourceId: input.source.id, contentHash: input.source.contentHash,
       passagesTotal: chunks.length, passagesCited: citedChunks.size,
@@ -134,16 +172,24 @@ export async function extractFromSource(deps: ExtractDeps, input: ExtractInput):
       return res;
     } catch (e) {
       if (e instanceof ModelPortError) {
-        throw stop(e.code === 'aborted' ? 'aborted' : e.code === 'no_response' ? 'no_response' : 'provider_error', e.message);
+        if (e.usage !== undefined) usage = addUsage(usage, e.usage); // o gasto da chamada que falhou também conta
+        throw stop(e.code === 'aborted' ? 'aborted'
+          : e.code === 'no_response' ? 'no_response'
+          : e.code === 'cost_cap_exceeded' ? 'cost_cap_exceeded' : 'provider_error', e.message,
+          e.code === 'provider_error' ? e.retryable : undefined);
       }
       throw e;
     }
   };
 
   try {
-    if (TEXT_KIND.hashOf(text) !== input.source.contentHash || hashOf(text) !== input.source.contentHash) {
+    if (TEXT_KIND.hashOf(text) !== input.source.contentHash) {
       throw stop('source_hash_mismatch', 'o texto entregue não tem o hash do snapshot citado');
     }
+
+    // 0. O schema tem de dizer com que status a IA cria cada tipo; falhar antes de gastar uma chamada.
+    const statuses = resolveCreationStatuses(deps.schema);
+    if (!statuses.ok) throw stop('schema_unsupported', statuses.detail);
 
     // 1. Extração, passagem por passagem.
     const candidates: Candidate[] = [];
@@ -172,7 +218,9 @@ export async function extractFromSource(deps: ExtractDeps, input: ExtractInput):
           continue;
         }
         const first = found[0]!;
-        const ambiguous = found.length > 1;
+        // Ambígua se aparece mais de uma vez na passagem OU em qualquer outro ponto da fonte inteira
+        // (a mesma função do núcleo, `TEXT_KIND.locate`, agora sobre o texto todo).
+        const ambiguous = TEXT_KIND.locate(text, quote).length > 1; // a passagem é recorte da fonte: repetida nela => repetida na fonte
         if (ambiguous) ambiguousCitations.push(ref);
         const start = chunk.start + (first.start as number);
         const end = chunk.start + (first.end as number);
@@ -243,6 +291,13 @@ export async function extractFromSource(deps: ExtractDeps, input: ExtractInput):
       verified.push({ c, verdict: v.verdict });
     }
 
+    if (fresh.length > 0 && uncheckedByVerifier.length / fresh.length > threshold) {
+      verifierDegraded = {
+        unchecked: uncheckedByVerifier.length, verified: fresh.length,
+        fraction: uncheckedByVerifier.length / fresh.length, threshold,
+      };
+    }
+
     // 5. Montagem: origem completa de agente; o núcleo valida cada Change (0 problemas ou descarte).
     const originParams: Attrs = {};
     for (const [k, v] of Object.entries(params)) if (v !== undefined) originParams[k] = v as JsonValue;
@@ -263,7 +318,7 @@ export async function extractFromSource(deps: ExtractDeps, input: ExtractInput):
           op: 'create_item',
           itemId: deps.ids.next() as ItemId,
           type: c.item.type,
-          status: STATUS_BY_TYPE[c.item.type],
+          status: statuses.byType[c.item.type],
           content: c.item.statement,
           attributes: {},
           evidence: [{
@@ -293,6 +348,7 @@ export async function extractFromSource(deps: ExtractDeps, input: ExtractInput):
       discarded.length = 0;
       ambiguousCitations.length = 0;
       uncheckedByVerifier.length = 0;
+      verifierDegraded = null;
       citedChunks.clear();
       return { ok: false, error: e.error, report: baseReport(0) };
     }

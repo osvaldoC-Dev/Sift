@@ -132,3 +132,29 @@ Um change é stale se algum **alvo tocado** (item atualizado/aposentado ou extre
 - Logs sem texto de fonte, citação, chave nem pilha. CORS fechado por omissão. Sem relógio, aleatoriedade nem
   `console` em `src` (entram por injeção).
 - O histórico do cliente é uma cadeia de hashes verificável só com os campos que ele recebe.
+
+## Rodada 3 (3.2b endurecido, 3.3 preparado)
+- A chave do fornecedor só existe em `kimiConfigFromEnv` e no cabeçalho de UMA chamada; nenhum erro, gravação, log ou
+  relatório a contém (`redactSecrets` em tudo o que sai do adaptador; testado em todas as famílias de erro).
+- O adaptador nunca envia `temperature` nem `seed`.
+- Nenhuma execução passa do teto de custo por mais de UMA chamada; sem teto configurado, nada corre.
+- O custo nunca é zero por falta de `usage`: é estimado por cima e marcado.
+- Falha de fornecedor nunca é contada como item errado; com fonte em falta não há veredicto.
+- Um verificador que falha em mais da metade dos itens deixa rasto no relatório (`verifierDegraded`), nunca em silêncio.
+- O status com que a IA cria cada tipo vem do schema do projeto, nunca do código.
+- A extração não segura a fila de escrita do projeto durante a chamada ao modelo; a escrita final é atômica em relação
+  às outras escritas (as propostas de uma execução ficam contíguas na auditoria).
+- Proposta de agente é idempotente pela chave `runId:sourceId:ref`.
+
+## API, incremento 2 (contrato 0.3.0)
+- `provisional` (ProposalView) = a operação de criação tem o status provisório do tipo no schema
+  (`provisionalStatus`). Tipos sem `provisionalStatus` (ex.: pergunta) nunca são `provisional`.
+- `Quote.start`/`end`: pontos de código Unicode sobre o texto NFC guardado (`SourceView.text`); vêm de
+  `SourceKind.locate` do núcleo, nunca de busca própria.
+- A elegibilidade (`eligibility.ts`) nunca lança: o que o núcleo recusa e o contrato não nomeia vira `core_refused`.
+  Disponibilidade da API = disponibilidade do núcleo (teste de equivalência exaustivo).
+- Decidir é idempotente por proposta: repetir devolve `already_decided` e não acrescenta nada ao histórico.
+- Desfazer é uma mudança compensatória nova; o histórico (núcleo e auditoria) só cresce. Só a decisão mais recente.
+- Toda rota que escreve (`captureSource`, `startExtraction` fase final, `decide`, `batchAccept`, `undo`) corre em
+  `locked(projectId)`; as escritas de um pedido formam um bloco contíguo.
+- Fonte de IA exige `originRunId` de execução existente; fonte humana não pode tê-lo.

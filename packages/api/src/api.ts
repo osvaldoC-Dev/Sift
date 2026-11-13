@@ -1,22 +1,24 @@
 import {
-  normalizeText, type Change, type ChangeDraft, type ChangeId, type Clock, type IdGenerator, type UserId,
+  TEXT_KIND, compensate, normalizeText, resolveKind,
+  type Change, type ChangeDraft, type ChangeId, type Clock, type IdGenerator, type Operation, type ProjectId, type UserId,
 } from '@sift/core';
 import { extractFromSource, sourceCreationOp, type ExtractError, type ModelParams, type ModelPort } from '@sift/ai';
 import {
-  CaptureSourceRequest, CaptureSourceResponse, ExtractionResponse, ProposalView, ResponseSchemas, Routes,
-  StartExtractionRequest,
-  StateView, type LogEntry as LogEntryView, type SourceView,
+  BatchAcceptRequest, CaptureSourceRequest, CaptureSourceResponse, DecisionRequest, ExtractionResponse, ProposalView,
+  ResponseSchemas, Routes, StartExtractionRequest,
+  StateView, type BlockCode, type LogEntry as LogEntryView, type SourceView,
 } from '@sift/contract';
 import {
   HttpError, ResponseInvalid, compileRoutes, fail, makeEmitter, matchRoute, parseBody,
   type ApiRequest, type ApiResponse,
 } from './http';
-import type { AuditEntry, ProjectStore, SourceRecord, Store } from './store';
-import { listProposalViews, loadProposalView } from './views';
+import type { AuditEntry, ProjectStore, ReviewInput, SourceRecord, Store } from './store';
+import type { LogEntry as CoreEntry } from '@sift/core';
+import { effectiveOperations, listProposalViews, loadProposalView, undoneIds } from './views';
 
 /** Evento de log SEM conteúdo: rota, estado, códigos. Nunca texto de fonte, citação, chave nem pilha. */
 export interface LogEvent {
-  level: 'info' | 'error';
+  level: 'info' | 'warn' | 'error';
   event: string;
   route?: string;
   status?: number;
@@ -38,6 +40,8 @@ export interface ApiDeps {
   logger?: (e: LogEvent) => void;
   extractionParams?: ModelParams;
   maxChunkChars?: number;
+  /** Fração de itens `unchecked` por falha do verificador que dispara o aviso `verifier_degraded` (padrão 0,5). */
+  verifierDegradedThreshold?: number;
 }
 
 export interface Api {
@@ -61,7 +65,10 @@ function extractionError(e: ExtractError): { code: 'provider_failure' | 'schema_
     case 'provider_error': return { code: 'provider_failure', retryable: e.retryable };
     case 'no_response': return { code: 'provider_failure', retryable: false };
     case 'aborted': return { code: 'provider_failure', retryable: false };
-    case 'source_hash_mismatch': throw fail('internal', 'erro interno');
+    // O contrato 0.2.1 não tem código próprio para o teto de custo: aparece como falha do fornecedor, sem nova tentativa ([C1]).
+    case 'cost_cap_exceeded': return { code: 'provider_failure', retryable: false };
+    case 'source_hash_mismatch':
+    case 'schema_unsupported': throw fail('internal', 'erro interno');
   }
 }
 
@@ -90,9 +97,9 @@ export function createApi(deps: ApiDeps): Api {
   const captureSource: Handler = async ({ req, params, ps }) => {
     const body = parseBody<typeof CaptureSourceRequest._output>(CaptureSourceRequest, readBody(req));
     if (body.originType === 'ai') {
-      // O núcleo exige a execução de origem de uma fonte de IA; o contrato 0.2.1 não a carrega. Recusar é mais
-      // honesto do que inventar uma proveniência (OPEN-DECISIONS).
-      throw fail('invalid_request', 'fonte de IA exige a execução de origem, que o contrato ainda não carrega');
+      // O contrato (schema) já exige originRunId para IA e o proíbe para humano. Aqui se confere que a execução EXISTE.
+      const known = (await ps.changes()).some((c) => c.origin.kind === 'agent' && c.origin.runId === body.originRunId);
+      if (!known) throw fail('invalid_request', 'pedido inválido: originRunId desconhecido');
     }
     const text = normalizeText(body.text);
     if (text.trim() === '') throw fail('invalid_request', 'pedido inválido: text: vazio');
@@ -105,7 +112,8 @@ export function createApi(deps: ApiDeps): Api {
         origin: { kind: 'human', actorId },
         rationale: 'Captura de fonte',
         operations: [sourceCreationOp({
-          id, label: body.name, contentHash, originType: 'human',
+          id, label: body.name, contentHash, originType: body.originType,
+          ...(body.originRunId !== undefined ? { originRunId: body.originRunId } : {}),
           ...(body.originLabel !== undefined ? { originLabel: body.originLabel } : {}),
           ...(body.capturedAt !== undefined ? { capturedAt: body.capturedAt } : {}),
         })],
@@ -122,6 +130,7 @@ export function createApi(deps: ApiDeps): Api {
       if (!out.applied) throw fail('internal', 'erro interno'); // mudança humana é aplicada na hora
       const rec: SourceRecord = {
         id, name: body.name, contentHash, originType: body.originType,
+        ...(body.originRunId !== undefined ? { originRunId: body.originRunId } : {}),
         ...(body.originLabel !== undefined ? { originLabel: body.originLabel } : {}),
         ...(body.capturedAt !== undefined ? { capturedAt: body.capturedAt } : {}),
         createdAt: deps.clock.now(),
@@ -135,36 +144,52 @@ export function createApi(deps: ApiDeps): Api {
   const getSource: Handler = async ({ params, ps }) => {
     const rec = await ps.getSource(params.sourceId!);
     if (rec === undefined) throw fail('not_found', 'fonte não encontrada');
-    return emitter.emit(CaptureSourceResponse, { source: await sourceView(ps, rec) }, []);
+    return emitter.emit(ResponseSchemas.getSource, { source: await sourceView(ps, rec) }, []);
   };
 
+  /**
+   * Extração em DUAS FASES (decisão B do OPEN-DECISIONS §7.1): ler e chamar o modelo SEM travar o projeto
+   * (pode levar minutos com um modelo real); travar só para propor as mudanças. As mudanças partem do
+   * `baseVersion` lido na fase 1; se o projeto mudou nesse meio tempo, o núcleo as trata como obsoletas (`stale`)
+   * e a proposta nasce `stale`, nunca perde nada. A idempotência `runId:sourceId:ref` protege contra repetição.
+   */
   const startExtraction: Handler = async ({ req, params, ps }) => {
     const body = parseBody<{ sourceId: string }>(StartExtractionRequest, readBody(req));
+    // Fase 1 (sem fila): só leitura.
+    const src = await ps.getSource(body.sourceId);
+    if (src === undefined) throw fail('not_found', 'fonte não encontrada');
+    const text = await ps.getContent(src.contentHash);
+    if (text === undefined) throw fail('internal', 'erro interno');
+    const runId = deps.ids.next();
+    const state = await ps.state();
+    // Fase 2 (sem fila): o modelo.
+    const result = await extractFromSource(
+      { model: deps.model, schema: ps.schema, ids: deps.ids, clock: deps.clock },
+      {
+        runId: runId as never, projectId: ps.projectId, baseVersion: state.version,
+        schemaRef: { key: ps.schema.key, version: ps.schema.version }, state,
+        source: { id: src.id, label: src.name, contentHash: src.contentHash, text },
+        ...(deps.extractionParams !== undefined ? { params: deps.extractionParams } : {}),
+        ...(deps.maxChunkChars !== undefined ? { maxChunkChars: deps.maxChunkChars } : {}),
+        ...(deps.verifierDegradedThreshold !== undefined ? { verifierDegradedThreshold: deps.verifierDegradedThreshold } : {}),
+      },
+    );
+    if (!result.ok) {
+      const mapped = extractionError(result.error);
+      log({ level: 'error', event: 'extraction_failed', projectId: ps.projectId, runId, code: result.error.code });
+      return emitter.emit(ExtractionResponse, {
+        ok: false, error: { code: mapped.code, retryable: mapped.retryable, message: ERROR_MESSAGES[mapped.code] },
+      }, []);
+    }
+    const unchecked = new Set(result.report.uncheckedByVerifier.map((u) => u.ref));
+    if (result.report.verifierDegraded !== null) {
+      // Nunca em silêncio: o contrato 0.2.1 não carrega este aviso na resposta ([C1]); fica no log e em `verifierFailed`.
+      log({ level: 'warn', event: 'verifier_degraded', projectId: ps.projectId, runId, detail: JSON.stringify(result.report.verifierDegraded) });
+    }
+    const modelId = result.report.model;
+    if (modelId === '') throw fail('internal', 'erro interno');
+    // Fase 3 (na fila): só a escrita final.
     return locked(params.projectId!, async () => {
-      const src = await ps.getSource(body.sourceId);
-      if (src === undefined) throw fail('not_found', 'fonte não encontrada');
-      const text = await ps.getContent(src.contentHash);
-      if (text === undefined) throw fail('internal', 'erro interno');
-      const runId = deps.ids.next();
-      const state = await ps.state();
-      const result = await extractFromSource(
-        { model: deps.model, schema: ps.schema, ids: deps.ids, clock: deps.clock },
-        {
-          runId: runId as never, projectId: ps.projectId, baseVersion: state.version,
-          schemaRef: { key: ps.schema.key, version: ps.schema.version }, state,
-          source: { id: src.id, label: src.name, contentHash: src.contentHash, text },
-          ...(deps.extractionParams !== undefined ? { params: deps.extractionParams } : {}),
-          ...(deps.maxChunkChars !== undefined ? { maxChunkChars: deps.maxChunkChars } : {}),
-        },
-      );
-      if (!result.ok) {
-        const mapped = extractionError(result.error);
-        log({ level: 'error', event: 'extraction_failed', projectId: ps.projectId, runId, code: result.error.code });
-        return emitter.emit(ExtractionResponse, {
-          ok: false, error: { code: mapped.code, retryable: mapped.retryable, message: ERROR_MESSAGES[mapped.code] },
-        }, []);
-      }
-      const unchecked = new Set(result.report.uncheckedByVerifier.map((u) => u.ref));
       const prefix = `${runId}:${src.id}:`;
       const created: Change[] = [];
       for (const change of result.changes) {
@@ -181,8 +206,6 @@ export function createApi(deps: ApiDeps): Api {
       }
       const proposals: ProposalView[] = [];
       for (const change of created) proposals.push(await loadProposalView(ps, change));
-      const modelId = result.report.model;
-      if (modelId === '') throw fail('internal', 'erro interno');
       return emitter.emit(ExtractionResponse, {
         ok: true, runId, proposals, discarded: result.report.discarded.length,
         ambiguousCitations: result.report.ambiguousCitations.length, modelId,
@@ -199,7 +222,22 @@ export function createApi(deps: ApiDeps): Api {
       filter = parsed.data;
     }
     const views = await listProposalViews(ps, filter);
-    return emitter.emit(ProposalView.array(), views, views);
+    return emitter.emit(ResponseSchemas.proposals, views, views);
+  };
+
+  /** Decisão mais recente que ainda se pode desfazer (pilha: só a do topo) e se o núcleo deixa compensá-la agora. */
+  const undoTarget = async (ps: ProjectStore): Promise<{ entry: CoreEntry; ok: boolean } | undefined> => {
+    const [state, entries, gone] = await Promise.all([ps.state(), ps.entries(), undoneIds(ps)]);
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const entry = entries[i]!;
+      if (entry.origin.kind !== 'agent' || gone.has(entry.changeId)) continue;
+      const probe = compensate(entry, state, {
+        changeId: 'undo-probe' as ChangeId, projectId: ps.projectId as ProjectId,
+        schemaRef: { key: ps.schema.key, version: ps.schema.version }, actor: actorId, now: deps.clock.now(),
+      });
+      return { entry, ok: probe.ok };
+    }
+    return undefined;
   };
 
   const getState: Handler = async ({ ps }) => {
@@ -209,18 +247,128 @@ export function createApi(deps: ApiDeps): Api {
     for (const it of state.items.values()) {
       if (it.retired || !ProposalView.shape.type.options.includes(it.type as never) || it.type === 'relation') continue;
       const sourceIds: string[] = [];
+      const evidence: { sourceId: string; quote: string; start: number | null; end: number | null }[] = [];
       for (const ev of it.evidence) {
         const s = await ps.sourceByHash(ev.contentHash);
-        if (s !== undefined && !sourceIds.includes(s.id)) sourceIds.push(s.id);
+        if (s === undefined) continue;
+        if (!sourceIds.includes(s.id)) sourceIds.push(s.id);
+        if (ev.quote === undefined || ev.quote === '') continue;
+        const kind = resolveKind(ev, new Map([[TEXT_KIND.kind, TEXT_KIND]]));
+        const text = await ps.getContent(ev.contentHash);
+        const first = kind !== undefined && text !== undefined
+          ? (kind.locate(text, ev.quote)[0] as { start: number; end: number } | undefined) : undefined;
+        evidence.push({ sourceId: s.id, quote: ev.quote, start: first ? first.start : null, end: first ? first.end : null });
       }
-      items.push({ id: it.id, type: it.type, text: it.content ?? '', sourceIds });
+      items.push({ id: it.id, type: it.type, text: it.content ?? '', sourceIds, evidence });
     }
-    // Só as relações cujo tipo o contrato conhece (OPEN-DECISIONS: research@1 usa outros nomes).
+    // `kind` é livre no contrato 0.3.0: os nomes vêm do schema do projeto.
     const relations = [...state.relations.values()]
-      .filter((r) => !r.retired && ['contradiction', 'near_miss', 'duplicate'].includes(r.type))
+      .filter((r) => !r.retired)
       .map((r) => ({ id: r.id, kind: r.type, from: r.from, to: r.to }));
     const headHash = entries.length > 0 ? entries[entries.length - 1]!.entryHash : null;
-    return emitter.emit(StateView, { items, relations, headHash }, []);
+    const target = await undoTarget(ps);
+    return emitter.emit(StateView, { items, relations, headHash, canUndo: target?.ok === true }, []);
+  };
+
+  const agentChange = async (ps: ProjectStore, id: string): Promise<Change | undefined> =>
+    (await ps.changes()).find((c) => c.id === id && c.origin.kind === 'agent');
+
+  /** Código do núcleo -> código do contrato. Nada aqui lança. */
+  const refusal = (a: { ok: false; code: BlockCode }): HttpError =>
+    a.code === 'stale' ? fail('stale', 'a proposta ficou desatualizada') : fail('not_allowed', 'ação não permitida', a.code);
+
+  type Applied = { ok: true; entry: AuditEntry } | { ok: false; code: BlockCode };
+  /** Aplica UMA decisão humana no núcleo e a regista na auditoria. Chamar só dentro de `locked`. */
+  const applyReview = async (
+    ps: ProjectStore, change: Change, how: 'accept' | 'reject' | { edit: string }, batch: boolean,
+  ): Promise<Applied> => {
+    const reviewer = { kind: 'human', id: actorId } as const;
+    let input: ReviewInput;
+    if (how === 'reject') input = { changeId: change.id, decision: 'reject', reviewer };
+    else if (how === 'accept') input = { changeId: change.id, decision: 'accept', reviewer, batch };
+    else {
+      const ops = effectiveOperations(change, await ps.reviewEvents(change.id));
+      const first = ops[0];
+      if (first === undefined || first.op !== 'create_item') return { ok: false, code: 'core_refused' };
+      const edited: Operation[] = [{ ...first, content: how.edit }, ...ops.slice(1)];
+      input = { changeId: change.id, decision: 'accept_edited', reviewer, editedOperations: edited };
+    }
+    const out = await ps.review(input);
+    if (!out.ok) {
+      const code: BlockCode = out.code === 'stale' ? 'stale' : out.code === 'not_pending' ? 'already_decided' : 'core_refused';
+      return { ok: false, code };
+    }
+    const action = how === 'reject' ? 'reject' : typeof how === 'object' ? 'accept_edited' : batch ? 'accept_batch' : 'accept';
+    const entry = await ps.appendAudit({
+      action, targetId: change.id, ...(out.applied ? { coreVersion: out.version } : {}),
+    });
+    return { ok: true, entry };
+  };
+
+  const decide: Handler = async ({ req, params, ps }) => {
+    const body = parseBody<typeof DecisionRequest._output>(DecisionRequest, readBody(req));
+    return locked(params.projectId!, async () => {
+      const change = await agentChange(ps, params.proposalId!);
+      if (change === undefined) throw fail('not_found', 'proposta não encontrada');
+      const before = await loadProposalView(ps, change);
+      const gate = body.kind === 'reject' ? before.canReject : before.canAccept;
+      if (!gate.ok) throw refusal(gate);
+      if (body.kind === 'edit') {
+        const current = effectiveOperations(change, await ps.reviewEvents(change.id))[0];
+        if (current?.op === 'create_item' && (current.content ?? '') === body.text) {
+          throw fail('invalid_request', 'pedido inválido: o texto é igual ao original; aceite sem editar');
+        }
+      }
+      const done = await applyReview(ps, change, body.kind === 'edit' ? { edit: body.text } : body.kind, false);
+      if (!done.ok) throw refusal(done);
+      const proposal = await loadProposalView(ps, change);
+      return emitter.emit(ResponseSchemas.decision, { proposal, log: toView(done.entry) }, [proposal]);
+    });
+  };
+
+  const batchAccept: Handler = async ({ req, params, ps }) => {
+    const body = parseBody<typeof BatchAcceptRequest._output>(BatchAcceptRequest, readBody(req));
+    const ids = [...new Set(body.ids)];
+    return locked(params.projectId!, async () => {
+      const accepted: string[] = [];
+      const refused: { id: string; code: BlockCode }[] = [];
+      const log: LogEntryView[] = [];
+      const seen: Change[] = [];
+      for (const id of ids) {
+        const change = await agentChange(ps, id);
+        // O contrato 0.3.0 não tem `not_found` entre os BlockCode: id inexistente sai como `core_refused` ([C1]).
+        if (change === undefined) { refused.push({ id, code: 'core_refused' }); continue; }
+        seen.push(change);
+        const view = await loadProposalView(ps, change); // fresco: aceitar uma pode ter tornado outra obsoleta
+        if (!view.canBatchAccept.ok) { refused.push({ id, code: view.canBatchAccept.code }); continue; }
+        const done = await applyReview(ps, change, 'accept', true);
+        if (!done.ok) { refused.push({ id, code: done.code }); continue; }
+        accepted.push(id);
+        log.push(toView(done.entry));
+      }
+      const proposals: ProposalView[] = [];
+      const gone = await undoneIds(ps);
+      for (const c of seen) proposals.push(await loadProposalView(ps, c, gone));
+      return emitter.emit(ResponseSchemas.batchAccept, { accepted, refused, proposals, log }, proposals);
+    });
+  };
+
+  const undo: Handler = async ({ params, ps }) => {
+    return locked(params.projectId!, async () => {
+      const target = await undoTarget(ps);
+      if (target === undefined) throw fail('not_allowed', 'nada a desfazer');
+      if (!target.ok) throw fail('conflict', 'a decisão mais recente já foi seguida de mudanças nos mesmos itens');
+      const out = await ps.undo(target.entry.version, actorId);
+      if (!out.ok) {
+        if (out.code === 'undo_conflict' || out.code === 'conflict') throw fail('conflict', 'não foi possível desfazer: o projeto mudou');
+        throw fail('internal', 'erro interno');
+      }
+      if (!out.applied) throw fail('internal', 'erro interno');
+      const entry = await ps.appendAudit({ action: 'undo', targetId: target.entry.changeId, coreVersion: out.version });
+      const change = await agentChange(ps, target.entry.changeId);
+      const proposal = change === undefined ? null : await loadProposalView(ps, change);
+      return emitter.emit(ResponseSchemas.undo, { proposal, log: toView(entry) }, proposal === null ? [] : [proposal]);
+    });
   };
 
   const getLog: Handler = async ({ ps }) => {
@@ -229,14 +377,10 @@ export function createApi(deps: ApiDeps): Api {
     return emitter.emit(ResponseSchemas.log, view, []);
   };
 
-  const notYet: Handler = async () => {
-    throw new HttpError('internal', 'rota ainda não implementada (incremento 2 da API)');
-  };
-
   /** Uma entrada por rota do contrato. O tipo `Record<keyof Routes, ...>` faz o compilador exigir todas, e só elas. */
   const handlers: Record<keyof typeof Routes, Handler> = {
     captureSource, getSource, startExtraction, listProposals, getState, getLog,
-    decide: notYet, batchAccept: notYet, undo: notYet,
+    decide, batchAccept, undo,
   };
 
   const allowedOrigin = (req: ApiRequest): string | undefined => {

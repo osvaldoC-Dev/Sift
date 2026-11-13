@@ -37,7 +37,11 @@ export interface ViewInput {
   meta: ProposalMeta | undefined;
   /** Fonte a que a citação se refere: id e texto exato guardado. */
   source: { id: string; text: string };
+  /** A decisão foi desfeita (compensada). O núcleo não tem estado "desfeita": a API a mostra como `rejected`. */
+  undone?: boolean;
 }
+
+const DECIDED = { ok: false, code: 'already_decided' } as const;
 
 /** Operações que valem agora: as editadas pela pessoa (já reconciliadas pelo núcleo), se houve `accept_edited`. */
 export function effectiveOperations(change: Change, events: readonly ReviewEvent[]): Operation[] {
@@ -76,9 +80,13 @@ export function buildProposalView(i: ViewInput): ProposalView {
   const support = weakest(ops.flatMap((o) => o.evidence));
   const typeDef = op.op === 'create_item' && Object.hasOwn(i.schema.itemTypes, op.type) ? i.schema.itemTypes[op.type] : undefined;
   const stale = i.status === 'stale' || (isPending(i.status) && staleReasons(i.change, i.state).length > 0);
-  const elig = eligibility({
-    schema: i.schema, state: i.state, change: i.change, status: i.status, found: where.length, support,
-  });
+  const undone = i.undone === true;
+  // Desfeita = fora de vigor e fechada: nada mais se decide sobre ela (OPEN-DECISIONS: não há estado "desfeita" no contrato).
+  const elig = undone
+    ? { canAccept: DECIDED, canReject: DECIDED, canBatchAccept: DECIDED }
+    : eligibility({
+      schema: i.schema, state: i.state, change: i.change, status: i.status, found: where.length, support,
+    });
 
   const view: ProposalView = {
     id: i.change.id,
@@ -89,11 +97,11 @@ export function buildProposalView(i: ViewInput): ProposalView {
       start: first ? first.start : null, end: first ? first.end : null,
     },
     support,
-    status: viewStatus(i.status),
+    status: undone ? 'rejected' : viewStatus(i.status),
     provisional: typeDef?.provisionalStatus !== undefined && createdStatus === typeDef.provisionalStatus,
     edited: i.status === 'accepted_edited',
     verifierFailed: i.meta?.verifierFailed ?? false,
-    stale,
+    stale: undone ? false : stale,
     runId: i.change.origin.kind === 'agent' ? i.change.origin.runId : (i.meta?.runId ?? ''),
     originType: i.change.origin.kind === 'agent' ? 'ai' : 'human',
     ...(i.change.origin.kind === 'agent' ? { originLabel: i.change.origin.model } : {}),
@@ -103,9 +111,14 @@ export function buildProposalView(i: ViewInput): ProposalView {
 }
 
 /** Propostas da API = changes de agente. Os changes humanos (captura, desfazer) não são propostas. */
-export async function loadProposalView(ps: ProjectStore, change: Change): Promise<ProposalView> {
-  const [state, status, events, meta] = await Promise.all([
-    ps.state(), ps.statusOf(change.id), ps.reviewEvents(change.id), ps.getMeta(change.id),
+/** Ids das propostas cuja decisão já foi desfeita (o histórico de auditoria é a fonte, nada é apagado). */
+export async function undoneIds(ps: ProjectStore): Promise<Set<string>> {
+  return new Set((await ps.audit()).filter((a) => a.action === 'undo').map((a) => a.targetId));
+}
+
+export async function loadProposalView(ps: ProjectStore, change: Change, undone?: Set<string>): Promise<ProposalView> {
+  const [state, status, events, meta, gone] = await Promise.all([
+    ps.state(), ps.statusOf(change.id), ps.reviewEvents(change.id), ps.getMeta(change.id), undone ?? undoneIds(ps),
   ]);
   const ops = effectiveOperations(change, events);
   const hash = ops[0]?.evidence[0]?.contentHash;
@@ -113,15 +126,16 @@ export async function loadProposalView(ps: ProjectStore, change: Change): Promis
   const text = hash === undefined ? undefined : await ps.getContent(hash);
   if (src === undefined || text === undefined) throw new UnsupportedProposal('fonte da citação não encontrada');
   return buildProposalView({
-    schema: ps.schema, state, change, status, events, meta, source: { id: src.id, text },
+    schema: ps.schema, state, change, status, events, meta, source: { id: src.id, text }, undone: gone.has(change.id),
   });
 }
 
 export async function listProposalViews(ps: ProjectStore, filter?: ProposalView['status']): Promise<ProposalView[]> {
   const out: ProposalView[] = [];
+  const gone = await undoneIds(ps);
   for (const change of await ps.changes()) {
     if (change.origin.kind !== 'agent') continue;
-    const v = await loadProposalView(ps, change);
+    const v = await loadProposalView(ps, change, gone);
     if (filter === undefined || v.status === filter) out.push(v);
   }
   return out;

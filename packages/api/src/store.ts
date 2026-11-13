@@ -15,6 +15,8 @@ export interface SourceRecord {
   /** Guardados sem entrar em lógica (critério 10). */
   originType: 'human' | 'ai';
   originLabel?: string;
+  /** Execução de IA de origem (só `originType = ai`). */
+  originRunId?: string;
   capturedAt?: string;
   createdAt: string;
 }

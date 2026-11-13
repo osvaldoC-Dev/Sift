@@ -42,10 +42,10 @@ describe('elegibilidade (B): as regras são as do núcleo, traduzidas para os c�
   });
 
   it('decisão e afirmação: aceitar individual ok; lote recusado (impacto fora de batchEligibleImpact)', () => {
-    for (const type of ['decision', 'claim'] as const) {
+    for (const [type, code] of [['decision', 'decision_individual_only'], ['claim', 'needs_individual_review']] as const) {
       const r = elig(agentChange(type, 'full'));
       expect(r.canAccept).toEqual({ ok: true });
-      expect(r.canBatchAccept).toEqual({ ok: false, code: 'decision_individual_only' });
+      expect(r.canBatchAccept).toEqual({ ok: false, code });
     }
   });
 

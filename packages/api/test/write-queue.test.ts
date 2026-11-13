@@ -66,6 +66,24 @@ describe('fila de escrita por projeto (critério do 1b)', () => {
     });
   }
 
+  it('a escrita final de uma extração é atômica em relação às outras escritas: as propostas ficam contíguas na auditoria (12 sementes)', async () => {
+    for (let seed = 21; seed < 33; seed++) {
+      const h = harness([ext([claim, claim2]), ver('full'), ver('full')], {}, (s) => withLatency(s, seed, 6));
+      const src = await capture(h);
+      const jobs = [
+        h.call('POST', `/projects/${PROJECT}/extractions`, { sourceId: src }),
+        ...Array.from({ length: 12 }, (_, i) => h.call('POST', `/projects/${PROJECT}/sources`, { name: `d${i}.txt`, text: `Outro texto ${i}.` })),
+      ];
+      const [ex] = await Promise.all(jobs);
+      expect(ex!.body).toMatchObject({ ok: true });
+      const trail = await (await h.store.project(PROJECT))!.audit();
+      const at = trail.map((e, i) => (e.action === 'propose' ? i : -1)).filter((i) => i >= 0);
+      expect(at).toHaveLength(2);
+      expect(at[1]! - at[0]!, `semente ${seed}`).toBe(1); // nenhuma captura entre as duas propostas da mesma execução
+      expect(verifyAuditChain(trail)).toEqual({ ok: true });
+    }
+  });
+
   it('armazém: appendAudit concorrente direto no Store mantém seq contíguo e cadeia válida (obrigação do armazém durável)', async () => {
     const h = harness([], {}, (s) => withLatency(s, 9));
     const ps = (await h.store.project(PROJECT))!;

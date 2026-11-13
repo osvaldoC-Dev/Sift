@@ -81,7 +81,7 @@ describe("ExtractionResponse", () => {
 
 describe("outros", () => {
   it("lote devolve recusados com código", () => {
-    const r = { accepted: ["p1"], refused: [{ id: "p2", code: "decision_individual_only" }], log: [] };
+    const r = { accepted: ["p1"], proposals: [], refused: [{ id: "p2", code: "decision_individual_only" }], log: [] };
     expect(BatchAcceptResponse.safeParse(r).success).toBe(true);
     expect(BatchAcceptResponse.safeParse({ ...r, refused: [{ id: "p2" }] }).success).toBe(false);
   });
@@ -91,5 +91,5 @@ describe("outros", () => {
     expect(LogEntry.safeParse({ ...e, hash: "abc" }).success).toBe(false);
   });
   it("StateView aceita estado vazio com headHash null", () =>
-    expect(StateView.safeParse({ items: [], relations: [], headHash: null }).success).toBe(true));
+    expect(StateView.safeParse({ items: [], relations: [], headHash: null, canUndo: false }).success).toBe(true));
 });

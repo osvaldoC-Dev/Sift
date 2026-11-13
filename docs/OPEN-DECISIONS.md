@@ -186,16 +186,100 @@ Pontos para o Claude 1 (contrato 0.2.1) marcados com **[C1]**.
   isso o teste atual (`armazém: duas escritas com a mesma baseVersion...`) cobre a regra, mas não a multi-instância;
   `makeStore` deverá aceitar criar um segundo `Store` sobre o mesmo banco. O conflito é por elemento (regra do
   núcleo: `staleReasons`), não por versão global: duas escritas em elementos diferentes passam as duas.
-- **[C1/Osvaldo] A extração segura a fila durante a chamada ao modelo.** Hoje `startExtraction` corre inteira
-  dentro de `locked`; com o Kimi uma chamada pode durar minutos e bloquear TODAS as escritas do projeto (capturas,
-  decisões, desfazer). Duas opções, decisão pendente (recomendação minha: B):
-  - **A.** Manter tudo sob a fila e pôr um tempo limite na chamada ao modelo (por pedido, no `ModelPort`).
-    Simples; ainda bloqueia o projeto até o limite.
-  - **B.** Duas fases: ler (fonte, estado) sem travar; chamar o modelo sem travar; travar só para propor as
-    mudanças. Como a extração parte de um `baseVersion` lido antes, a fase final já trata o que mudou: o núcleo marca
-    como `stale` as propostas que ficaram obsoletas, e a idempotência (`runId:sourceId:ref`) protege contra
-    repetição. Custo: uma proposta pode nascer já `stale`; a UI do 3.4 mostra isso.
-  Nenhuma das duas foi implementada.
+- **Extração em duas fases (decisão B do Claude 1, IMPLEMENTADA):** `startExtraction` lê (fonte, estado, versão) e
+  chama o modelo SEM a fila; só a escrita final (`proposeChange`, metadados, auditoria) entra em `locked`. Uma
+  proposta pode nascer com `baseVersion` atrasada; o núcleo trata (`stale` por elemento) e a idempotência
+  `runId:sourceId:ref` impede repetição. Provas: `extraction-phases.test.ts` (captura, estado e log terminam enquanto o
+  modelo está preso) e o teste de atomicidade em `write-queue.test.ts` (as propostas de uma execução ficam contíguas
+  na auditoria). Custo conhecido: nada impede duas extrações da MESMA fonte ao mesmo tempo (propostas duplicadas, como
+  já era com extrações em série; ver §7 "re-extrair duplica").
+- **Achado e correção (núcleo):** `InMemoryLedger.propose` NÃO honrava `idempotencyKey` (só `submitHuman` honrava), então
+  a chave `runId:sourceId:ref` não protegia nada no caminho do agente. Agora a mesma chave devolve a proposta já criada
+  (com o estado ATUAL, não o do momento da criação); proposta recusada não consome a chave. Teste:
+  `core/test/propose-idempotency.test.ts`. O armazém durável do 1b tem de ter a mesma regra (chave única por projeto).
 - **Todas as rotas de escrita passam por `locked`:** `captureSource` e `startExtraction` hoje; `decide`,
   `batchAccept` e `undo` entram no incremento 2 com testes concorrentes (duas decisões na mesma proposta; lote
   concorrente com decisão individual; `undo` concorrente com captura nova).
+
+## 8. Rodada 3: endurecimento do 3.2b e preparação do 3.3
+
+### 8.1 Endurecimento do 3.2b
+- **`verifierDegraded`** (`RunReport`): `{unchecked, verified, fraction, threshold} | null`. Aparece quando a fração de
+  itens `unchecked` por saída inválida do verificador PASSA (`>`) do limite (`verifierDegradedThreshold`, padrão 0,5;
+  fora de 0..1 é `RangeError`). A execução continua `ok:true`. A fração conta os itens que chegaram ao verificador
+  (inclui os que ele descartou com `none`). Execução descartada: `null`.
+  **[C1] A resposta `ExtractionResponse` do contrato 0.2.1 não tem onde levar este aviso.** A API o grava no log
+  (`verifier_degraded`, nível `warn`) e cada proposta afetada já sai com `verifierFailed:true`. Peço um campo
+  opcional `verifierDegraded` (ou `warnings: string[]`) em `ExtractionResponse` para a UI do 3.4 mostrar.
+- **Status por tipo lido do schema** (`resolveCreationStatuses`): `provisionalStatus` do tipo; sem ele, `open` se a IA
+  puder criar em `open`; senão o único status de criação da IA; senão erro tipado `schema_unsupported` (não
+  retentável, ANTES de gastar uma chamada). Um schema sem algum dos quatro tipos extraídos (ex.: `decisions@1`) é
+  recusado inteiro, não só o tipo em falta (decisão minha; alternativa: recusar só os itens desse tipo).
+  A API traduz `schema_unsupported` para `internal`.
+- **Ambiguidade entre passagens:** a citação é ambígua se `TEXT_KIND.locate(textoInteiro, citação)` achar mais de uma
+  ocorrência (a passagem é recorte da fonte, então repetida na passagem implica repetida na fonte). A posição gravada
+  continua a da ocorrência dentro da passagem; só se marca. Continua sem `changeSetId`/`derived_from`.
+- **Redundâncias removidas** (mutações equivalentes que sobreviviam): o hash do snapshot é checado uma vez
+  (`TEXT_KIND.hashOf`); a ambiguidade usa só a fonte inteira.
+
+### 8.2 Adaptador do Kimi e teto de custo (3.3, SEM chamada real)
+- `src/adapters/kimi.ts` (`KimiModel`), `src/cost.ts` (`CostGuard`, `KIMI_K3_PRICES`), `src/secrets.ts`
+  (`redactSecrets`), `eval/live.ts` (runner), `eval/live-config.ts`, `eval/live-cli.ts`. Tudo testado só com
+  transporte falso; o CLI (`live-cli.ts`) NÃO foi executado.
+- **NÃO CONFIRMADO para o K3 (só a primeira chamada real mínima, K9, confirma):** rota `/chat/completions` no estilo
+  OpenAI; `reasoning_effort` com `low|high|max`; `max_tokens` como nome do teto de saída; onde vem o uso em cache
+  (`usage.cached_tokens` ou `usage.prompt_tokens_details.cached_tokens`; os dois são lidos); se os tokens de raciocínio
+  já vêm em `completion_tokens` (assumo que sim). Nunca se envia `temperature` nem `seed`.
+- **`usage` em falta nunca vira custo zero:** estima-se por cima (entrada = caracteres/2; saída = o teto de saída) e
+  marca-se `estimated:true`; o relatório conta as chamadas estimadas.
+- **Teto de custo:** dólares e tokens são AMBOS obrigatórios (por fonte e total); "atingir" é `>=`; o gasto pode
+  passar do teto por no máximo UMA chamada (limitada por `max_tokens`). Não há estimativa de pior caso ANTES da chamada
+  (decisão minha; custo: uma chamada pode estourar o teto por até `max_tokens × US$ 15/M`). Estourar o teto PARA a
+  corrida inteira (as fontes restantes ficam `not_run`) e o veredicto é `incompleto`.
+  **[C1] O contrato 0.2.1 não tem código para `cost_cap_exceeded`:** a API mostra `provider_failure` não retentável.
+- **Veredicto só com as 7 fontes avaliadas.** Falha de fornecedor deixa a fonte `failed` (uma nova tentativa só se
+  retentável) e nunca vira "item errado". Com fonte em falta: `incompleto`, sem limiares e sem números de recall.
+  Limiar sem dados (ex.: taxa de citação sem nenhuma previsão) NÃO passa.
+- **O runner recusa:** sem tetos; `approval-thresholds.json` não commitado ou modificado (consulta o git); conjunto de
+  fontes diferente das 7 sintéticas. Lê os limiares só desse JSON (regista o sha256). Não escreve em lugar nenhum; o
+  CLI recusa gravar em cima do gabarito, das fontes ou dos limiares.
+- **Respostas gravadas:** `recording.json` (formato do `RecordedModel`, repete a corrida offline e de graça, testado:
+  mesmo relatório) e `raw.jsonl` (corpo bruto do fornecedor, com a chave redigida).
+- **O que o Osvaldo define** para correr: `MOONSHOT_API_KEY`, `SIFT_LIVE_MAX_USD`, `SIFT_LIVE_MAX_TOKENS`,
+  `SIFT_LIVE_SOURCE_MAX_USD`, `SIFT_LIVE_SOURCE_MAX_TOKENS`, `SIFT_LIVE_MAX_OUTPUT_TOKENS` (obrigatórias; o runner
+  recusa sem elas); opcionais `SIFT_LIVE_REASONING_EFFORT` (padrão `low`), `SIFT_LIVE_MODEL`, `MOONSHOT_BASE_URL`
+  (https obrigatório). Falta o script `npm run eval:live`: precisa de `tsx` como devDependency (hoje o repo não o
+  tem), o que muda o lock; fica para a rodada da chamada real, por `npm install` do Osvaldo.
+- **Segundo modelo:** o adaptador é configurável por `baseUrl`/`model` (`KimiModel` serve a qualquer API
+  compatível); a escolha continua do Osvaldo. Nada foi ligado.
+
+## 9. API, incremento 2 (decidir, lote, desfazer) e contrato 0.3.0
+
+Decisões tomadas por Claude 2. Itens marcados **[C1]** precisam de Claude 1 (contrato).
+
+1. **Elegibilidade nunca lança.** Recusa do núcleo sem tradução → `core_refused`. Lote recusado pela estrutura →
+   `decision_individual_only` (cria decisão), `relation_touches_adopted` (relação ligada a item que já existe) ou
+   `needs_individual_review` (impacto fora de `batchEligibleImpact`, transição explícita, só justificativa).
+   Equivalência com o núcleo testada em 270 combinações (tipo × suporte × citação × estado).
+2. **Desfazer = só a decisão aceita mais recente (pilha).** Compensação do núcleo; nunca apaga histórico; `canUndo`
+   é verdadeiro só se há tal decisão e `compensate` a aceita agora. Capturas (mudança humana) não se desfazem por
+   este botão. Sem corpo no pedido (o contrato 0.3.0 não traz).
+3. **Estado da proposta depois de desfazer.** O núcleo não tem "desfeita" (aceita é final). A API mostra a proposta
+   desfeita como `rejected`, tudo `already_decided`, `stale=false`; a fonte é a auditoria (`action=undo`).
+   O fixture `undo` do contrato mostra a proposta de volta como `pending`. **[C1]** Confirmar: (a) `rejected` serve, ou
+   (b) o contrato ganha estado `undone`, ou (c) quer-se `pending` de verdade, o que exige uma transição nova no
+   núcleo (aceita → adiada) e a proposta voltaria já `stale`, só rejeitável.
+4. **Lote com id inexistente.** `BlockCode` não tem `not_found`; o id sai em `refused` com `core_refused`.
+   **[C1]** Pedir `not_found` ao `BlockCode` (ou dizer que `core_refused` serve).
+5. **Erros de decisão.** Já decidida / bloqueada → `409 not_allowed` com `block`; obsoleta → `409 stale`; proposta
+   desconhecida → `404`; `edit` com texto igual ao original → `400` (aceite sem editar); `edit` de relação → `core_refused`
+   (o contrato não traz o texto editável de uma relação).
+6. **Edição.** Sempre `accept_edited` com suporte `unchecked` e `edited: true` (o núcleo rebaixa a evidência cujo
+   conteúdo mudou; por isso o texto idêntico é recusado).
+7. **`originRunId`.** Fonte de IA só é aceita se a execução existe: existe ao menos uma proposta com esse `runId`.
+   Uma execução que não produziu nenhuma proposta não conta como existente (**[C1]** se isso incomoda: o contrato
+   precisaria de uma lista de execuções).
+8. **Fila.** `decide`, `batchAccept` e `undo` correm em `locked` por projeto, como a captura. Continua valendo o
+   limite do §7.1: a fila é de um processo só; no 1b o Postgres precisa do mesmo teste com dois armazéns.
+9. **Lote e obsolescência.** Cada id é reavaliado na hora (vista fresca) porque aceitar uma proposta pode tornar
+   outra obsoleta; `proposals` na resposta é lida DEPOIS do lote.

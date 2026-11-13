@@ -46,6 +46,19 @@ export interface SourceCoverage {
   passagesCited: number;
 }
 
+/**
+ * Aviso de execução: o verificador falhou (saída fora do schema) em mais itens do que o limite. Os itens ficam
+ * `unchecked` (a revisão humana os pega), mas a execução inteira é marcada para que a degradação nunca passe em silêncio.
+ */
+export interface VerifierDegraded {
+  /** Itens que chegaram ao verificador e ficaram `unchecked` por saída inválida dele. */
+  unchecked: number;
+  /** Itens que chegaram ao verificador. */
+  verified: number;
+  fraction: number;
+  threshold: number;
+}
+
 export interface RunReport {
   runId: string;
   /** Versão do estado sobre a qual o modelo trabalhou. */
@@ -68,4 +81,6 @@ export interface RunReport {
    * Esses itens estão em `kept`; o humano os revisa (não entram em aceite provisório nem em lote).
    */
   uncheckedByVerifier: { ref: string; detail: string }[];
+  /** Não nulo quando a fração de `unchecked` passou do limite. A execução continua `ok:true`. */
+  verifierDegraded: VerifierDegraded | null;
 }
