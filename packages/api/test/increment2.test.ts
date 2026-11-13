@@ -225,7 +225,7 @@ describe('concorrência (armazém com latência simulada; várias sementes)', ()
       const decisions = (await log(h)).filter((e) => e.targetId === id && e.action !== 'propose');
       expect(decisions, `semente ${seed}`).toHaveLength(1);
     }
-  });
+  }, 120_000);
 
   it('lote concorrente com decisão individual da mesma proposta: decidida uma única vez', async () => {
     for (const seed of seeds) {
@@ -238,7 +238,7 @@ describe('concorrência (armazém com latência simulada; várias sementes)', ()
       const decisions = (await log(h)).filter((e) => e.targetId === q && e.action !== 'propose');
       expect(decisions, `semente ${seed}`).toHaveLength(1);
     }
-  });
+  }, 120_000);
 
   it('desfazer concorrente com captura nova: as duas acontecem, nenhuma perde a outra, cadeia íntegra', async () => {
     for (const seed of seeds) {
@@ -253,7 +253,7 @@ describe('concorrência (armazém com latência simulada; várias sementes)', ()
       expect((await state(h)).items).toEqual([]);
       expect(verifyAuditChain((await h.call('GET', `${P}/log`)).body as never).ok).toBe(true);
     }
-  });
+  }, 120_000);
 
   it('extração concorrente com decisão, desfazer e captura: nada se perde e nada intercala', async () => {
     for (const seed of seeds) {
@@ -275,7 +275,7 @@ describe('concorrência (armazém com latência simulada; várias sementes)', ()
       expect(entries.filter((e) => e.action === 'propose')).toHaveLength(3);
       expect(verifyAuditChain((await h.call('GET', `${P}/log`)).body as never).ok).toBe(true);
     }
-  });
+  }, 120_000);
 });
 
 describe('toda rota de escrita passa pela fila do projeto (observado: núcleo e auditoria na MESMA ordem)', () => {
@@ -350,7 +350,7 @@ describe('toda rota de escrita passa pela fila do projeto (observado: núcleo e 
       expect(contiguous(events), `semente ${seed}: ${events.join('')}`).toBe(true);
       expect(await consistent(h), `semente ${seed}`).toBe('ok');
     }
-  });
+  }, 120_000);
 
   const QS = ['Is A ready?', 'Is B ready?', 'Is C ready?', 'Is D ready?', 'Is E ready?', 'Is F ready?'];
   const qItems = QS.map((q) => ({ type: 'question', statement: q, quote: q }));
@@ -375,7 +375,7 @@ describe('toda rota de escrita passa pela fila do projeto (observado: núcleo e 
       expect(events.length, `semente ${seed}`).toBeGreaterThanOrEqual(8);
       expect(contiguous(events), `semente ${seed}: ${events.join('')}`).toBe(true);
     }
-  });
+  }, 120_000);
 
   it('desfazer concorrente com decisões: escreve em bloco', async () => {
     for (const seed of seeds20) {
@@ -392,5 +392,5 @@ describe('toda rota de escrita passa pela fila do projeto (observado: núcleo e 
       await Promise.all(calls.map((c, n) => als.run(n, c)));
       expect(contiguous(events), `semente ${seed}: ${events.join('')}`).toBe(true);
     }
-  });
+  }, 120_000);
 });

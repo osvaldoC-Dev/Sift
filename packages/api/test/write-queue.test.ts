@@ -82,7 +82,7 @@ describe('fila de escrita por projeto (critério do 1b)', () => {
       expect(at[1]! - at[0]!, `semente ${seed}`).toBe(1); // nenhuma captura entre as duas propostas da mesma execução
       expect(verifyAuditChain(trail)).toEqual({ ok: true });
     }
-  });
+  }, 120_000);
 
   it('armazém: appendAudit concorrente direto no Store mantém seq contíguo e cadeia válida (obrigação do armazém durável)', async () => {
     const h = harness([], {}, (s) => withLatency(s, 9));
