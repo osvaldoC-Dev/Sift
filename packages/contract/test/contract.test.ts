@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
+import { responses } from "../src/fixtures";
 import {
   ProposalView, Quote, DecisionRequest, CaptureSourceRequest, ExtractionResponse,
-  BatchAcceptResponse, LogEntry, StateView, Availability,
+  BatchAcceptResponse, LogEntry, StateView, Availability, ProposalStatus, BlockCode,
 } from "../src/index";
 
 const h = "a".repeat(64);
@@ -73,7 +74,7 @@ describe("ExtractionResponse", () => {
     expect(ExtractionResponse.safeParse({ ok: false, proposals: [] }).success).toBe(false);
   });
   it("sucesso leva o modelo e os descartes", () => {
-    const r = { ok: true, runId: "r1", proposals: [proposal], discarded: 2, ambiguousCitations: 0, modelId: "m-1" };
+    const r = { ok: true, runId: "r1", proposals: [proposal], discarded: 2, ambiguousCitations: 0, verifierDegraded: false, uncheckedCount: 0, modelId: "m-1" };
     expect(ExtractionResponse.safeParse(r).success).toBe(true);
     expect(ExtractionResponse.safeParse({ ...r, modelId: undefined }).success).toBe(false);
   });
@@ -81,7 +82,7 @@ describe("ExtractionResponse", () => {
 
 describe("outros", () => {
   it("lote devolve recusados com código", () => {
-    const r = { accepted: ["p1"], refused: [{ id: "p2", code: "decision_individual_only" }], log: [] };
+    const r = { accepted: ["p1"], proposals: [], refused: [{ id: "p2", code: "decision_individual_only" }], log: [] };
     expect(BatchAcceptResponse.safeParse(r).success).toBe(true);
     expect(BatchAcceptResponse.safeParse({ ...r, refused: [{ id: "p2" }] }).success).toBe(false);
   });
@@ -91,5 +92,18 @@ describe("outros", () => {
     expect(LogEntry.safeParse({ ...e, hash: "abc" }).success).toBe(false);
   });
   it("StateView aceita estado vazio com headHash null", () =>
-    expect(StateView.safeParse({ items: [], relations: [], headHash: null }).success).toBe(true));
+    expect(StateView.safeParse({ items: [], relations: [], headHash: null, canUndo: false }).success).toBe(true));
+});
+
+describe("0.4.0", () => {
+  it("falha por teto de custo é tipada e não retentável", () =>
+    expect(ExtractionResponse.safeParse(responses.extractionCostCap).success).toBe(true));
+  it("sucesso sem verifierDegraded é recusado", () => {
+    const { verifierDegraded: _v, ...rest } = responses.extractionOk as Record<string, unknown>;
+    expect(ExtractionResponse.safeParse(rest).success).toBe(false);
+  });
+  it("estado 'undone' e código 'not_found' existem", () => {
+    expect(ProposalStatus.safeParse("undone").success).toBe(true);
+    expect(BlockCode.safeParse("not_found").success).toBe(true);
+  });
 });

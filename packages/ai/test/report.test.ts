@@ -22,6 +22,7 @@ describe('tipos do relatório de execução', () => {
       usage: { inputTokens: 1200, outputTokens: 340 },
       modelChanges: 8, kept: 2, discarded, ambiguousCitations: ['$2'],
       uncheckedByVerifier: [{ ref: '$1', detail: 'verdict fora do schema' }],
+      verifierDegraded: { unchecked: 1, verified: 1, fraction: 1, threshold: 0.5 },
       coverage: [{ sourceId: 's1', contentHash: 'a'.repeat(64), passagesTotal: 12, passagesCited: 3 }],
     };
     expect(report.modelChanges).toBe(report.kept + report.discarded.length);

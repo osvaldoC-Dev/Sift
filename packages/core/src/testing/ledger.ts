@@ -64,6 +64,7 @@ export class InMemoryLedger implements ContentReader {
   readonly reviews: ReviewEvent[] = [];
   state: State = emptyState();
   private readonly idem = new Map<string, Outcome>();
+  private readonly proposeIdem = new Map<string, { ok: true; applied: false; status: ChangeStatus; change: Change }>();
 
   constructor(deps: LedgerDeps) {
     this.deps = deps;
@@ -96,6 +97,12 @@ export class InMemoryLedger implements ContentReader {
   /** Proposta de agente: validada contra o snapshot da versão-base e com evidência verificada. */
   async propose(draft: ChangeDraft): Promise<Outcome> {
     if (draft.origin.kind !== 'agent') return { ok: false, code: 'wrong_origin' };
+    // Idempotência: a MESMA chave (ex.: `runId:sourceId:ref`) devolve a proposta já criada, nunca uma segunda.
+    // Só proposta criada entra aqui: o que foi recusado não criou nada, então repetir não duplica.
+    if (draft.idempotencyKey !== undefined) {
+      const prev = this.proposeIdem.get(draft.idempotencyKey);
+      if (prev !== undefined) return { ...prev, status: this.statusOf(prev.change.id) };
+    }
     if (!Number.isInteger(draft.baseVersion) || draft.baseVersion < 0 || draft.baseVersion > this.head) {
       return { ok: false, code: 'invalid', issues: [{ code: 'base_version_invalid', message: 'baseVersion inválida' }] };
     }
@@ -106,7 +113,9 @@ export class InMemoryLedger implements ContentReader {
     if (failures.length > 0) return { ok: false, code: 'fidelity', failures };
     this.changes.set(prep.change.id, prep.change);
     if (staleReasons(prep.change, this.state).length > 0) this.markStale(prep.change.id);
-    return { ok: true, applied: false, status: this.statusOf(prep.change.id), change: prep.change };
+    const created = { ok: true as const, applied: false as const, status: this.statusOf(prep.change.id), change: prep.change };
+    if (draft.idempotencyKey !== undefined) this.proposeIdem.set(draft.idempotencyKey, created);
+    return created;
   }
 
   async review(input: ReviewInput): Promise<Outcome> {

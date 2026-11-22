@@ -6,3 +6,5 @@ export * from './memory-store';
 export * from './store';
 export * from './views';
 export * from './node-server';
+export * from './main';
+export * from './demo-model';

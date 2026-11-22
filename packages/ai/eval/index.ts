@@ -4,3 +4,5 @@ export * from './load';
 export * from './validate';
 export * from './score';
 export * from './report';
+export * from './live';
+export * from './live-config';
