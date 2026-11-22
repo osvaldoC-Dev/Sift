@@ -11,5 +11,8 @@
     "@sift/contract": "*",
     "@sift/core": "*",
     "@sift/schemas": "*"
+  },
+  "scripts": {
+    "start": "vite-node src/start.ts"
   }
 }

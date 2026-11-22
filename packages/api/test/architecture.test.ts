@@ -18,8 +18,8 @@ const importsOf = (code: string) => [...code.matchAll(/from\s+'([^']+)'/g)].map(
 describe('fronteiras da API', () => {
   const api = src('api');
 
-  it('api/src importa só core, schemas, ai, contract, node:http e arquivos próprios', () => {
-    const ok = /^(\.{1,2}\/|@sift\/(core|core\/testing|schemas|ai|contract)$|node:http$)/;
+  it('api/src importa só core, schemas, ai (e o adaptador do Kimi, por subcaminho explícito), contract, node:http e arquivos próprios', () => {
+    const ok = /^(\.{1,2}\/|@sift\/(core|core\/testing|schemas|ai|ai\/adapters\/kimi|contract)$|node:http$)/;
     for (const f of api) for (const i of importsOf(f.code)) expect(ok.test(i), `${f.path} importa ${i}`).toBe(true);
   });
 
@@ -39,10 +39,21 @@ describe('fronteiras da API', () => {
     }
   });
 
-  it('sem relógio, aleatoriedade nem console em src: tudo entra por injeção', () => {
-    for (const f of api) {
-      expect(f.code, f.path).not.toMatch(/Date\.now|new Date\(|Math\.random|randomUUID|console\./);
+  // `start.ts` é a raiz de composição: o ÚNICO ficheiro que liga relógio, ids, ambiente e consola ao sistema.
+  const isEntry = (p: string) => p.endsWith('/src/start.ts');
+
+  it('sem relógio, aleatoriedade, console nem `process` em src (exceto start.ts): tudo entra por injeção', () => {
+    for (const f of api.filter((x) => !isEntry(x.path))) {
+      expect(f.code, f.path).not.toMatch(/Date\.now|new Date\(|Math\.random|randomUUID|console\.|\bprocess\./);
     }
+  });
+
+  it('start.ts é fino: lê o ambiente, liga o sistema e delega tudo a main.ts', () => {
+    const entry = api.find((f) => isEntry(f.path))!;
+    expect(importsOf(entry.code)).toEqual(['./main']);
+    expect(entry.code.split('\n').length).toBeLessThan(40);
+    // só o ponto de entrada lê o ambiente; e nunca imprime o objeto de um erro (poderia carregar variáveis)
+    expect(entry.code).not.toMatch(/console\.\w+\(\s*e\s*[,)]/);
   });
 
   it('a API não recalcula verificação nem elegibilidade com lógica própria de busca', () => {

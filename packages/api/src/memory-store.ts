@@ -7,7 +7,7 @@ import {
 import { InMemoryLedger, type Outcome, type ReviewInput } from '@sift/core/testing';
 import { researchV1 } from '@sift/schemas';
 import { auditHash } from './audit';
-import type { AuditEntry, AuditInput, ProjectStore, ProposalMeta, SourceRecord, Store } from './store';
+import type { AuditEntry, AuditInput, ProjectStore, ProposalMeta, RunRecord, SourceRecord, Store } from './store';
 
 export class MemoryProjectStore implements ProjectStore {
   readonly projectId: ProjectId;
@@ -17,6 +17,7 @@ export class MemoryProjectStore implements ProjectStore {
   private readonly sources = new Map<string, SourceRecord>();
   private readonly byHash = new Map<Hash, SourceRecord>();
   private readonly metas = new Map<ChangeId, ProposalMeta>();
+  private readonly runs = new Map<string, RunRecord>();
   private readonly trail: AuditEntry[] = [];
 
   constructor(opts: { projectId: string; schema: ProjectSchema; clock: Clock; ids: IdGenerator }) {
@@ -76,6 +77,13 @@ export class MemoryProjectStore implements ProjectStore {
     return this.ledger.reviews.filter((r) => r.changeId === changeId);
   }
 
+  async saveRun(run: RunRecord): Promise<void> {
+    this.runs.set(run.runId, { ...run });
+  }
+  async getRun(runId: string): Promise<RunRecord | undefined> {
+    const r = this.runs.get(runId);
+    return r === undefined ? undefined : { ...r };
+  }
   async saveMeta(changeId: ChangeId, meta: ProposalMeta): Promise<void> {
     this.metas.set(changeId, { ...meta });
   }

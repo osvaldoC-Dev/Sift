@@ -1,5 +1,6 @@
 import { contentHash, normalizeText } from '@sift/core';
 import { Routes, checkProposalInvariants, ProposalView } from '@sift/contract';
+import { ModelPortError } from '@sift/ai';
 import { describe, expect, it } from 'vitest';
 import { verifyAuditChain, type Store } from '../src';
 import {
@@ -167,11 +168,32 @@ describe('C. fontes e citações', () => {
     expect(rich.props.map(strip)).toEqual(plain.props.map(strip));
   });
 
-  it('10b. fonte de IA é recusada (o contrato não traz a execução de origem que o núcleo exige)', async () => {
-    const h = harness();
-    const r = await h.call('POST', `${P}/sources`, { name: 'a', text: TEXT, originType: 'ai' });
-    expect(r.status).toBe(400);
-    expect(body(r).code).toBe('invalid_request');
+  it('10c. execução com 0 propostas CONTA como existente (contrato 0.4.0); execução que falhou não', async () => {
+    const h = harness([ext([])]);
+    const sid = await capture(h);
+    const r = await extract(h, sid);
+    expect(r.body).toMatchObject({ ok: true, proposals: [] });
+    const runId = body(r).runId as string;
+    const post = (b: object) => h.call('POST', `${P}/sources`, { name: 'a', text: TEXT + ' ', ...b });
+    expect((await post({ originType: 'ai', originRunId: runId })).status).toBe(201);
+    const failing = harness([], { model: { generate: async () => { throw new ModelPortError('provider_error', 'x', { retryable: false }); } } });
+    const s2 = await capture(failing);
+    expect(body(await extract(failing, s2)).ok).toBe(false);
+    expect((await failing.call('POST', `${P}/sources`, { name: 'a', text: TEXT + ' ', originType: 'ai', originRunId: 'qualquer' })).status).toBe(400);
+  });
+
+  it('10b. fonte de IA exige originRunId de uma execução que existe; humano não pode tê-lo (contrato 0.3.0)', async () => {
+    const h = harness([ext([claim]), ver('full')]);
+    const sid = await capture(h);
+    const runId = body(await extract(h, sid)).runId as string;
+    const post = (b: object) => h.call('POST', `${P}/sources`, { name: 'a', text: TEXT + ' ', ...b });
+    expect((await post({ originType: 'ai' })).status).toBe(400); // sem originRunId
+    expect((await post({ originType: 'ai', originRunId: 'run-que-nao-existe' })).status).toBe(400);
+    expect((await post({ originType: 'human', originRunId: runId })).status).toBe(400);
+    const ok = await post({ originType: 'ai', originRunId: runId });
+    expect(ok.status).toBe(201);
+    const ps = (await h.store.project(PROJECT))!;
+    expect(await ps.getSource(body(ok).source.id)).toMatchObject({ originType: 'ai', originRunId: runId });
   });
 });
 
@@ -274,7 +296,7 @@ describe('E/F/G. estado, histórico, reinício, segurança', () => {
     const ps = (await h.store.project(PROJECT))!;
     const entries = await ps.entries();
     expect(st.headHash).toBe(entries[entries.length - 1]!.entryHash);
-    expect(body(await harness().call('GET', `${P}/state`))).toEqual({ items: [], relations: [], headHash: null });
+    expect(body(await harness().call('GET', `${P}/state`))).toEqual({ items: [], relations: [], headHash: null, canUndo: false });
   });
 
   it('estado depois de uma aceitação (feita direto no armazém): item com texto e fonte', async () => {

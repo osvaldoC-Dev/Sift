@@ -15,6 +15,8 @@ export interface SourceRecord {
   /** Guardados sem entrar em lógica (critério 10). */
   originType: 'human' | 'ai';
   originLabel?: string;
+  /** Execução de IA de origem (só `originType = ai`). */
+  originRunId?: string;
   capturedAt?: string;
   createdAt: string;
 }
@@ -26,6 +28,13 @@ export interface ProposalMeta {
   /** Referência local do pipeline (`c0.1`). */
   ref: string;
   verifierFailed: boolean;
+}
+
+/** Uma execução de extração concluída (também as que não produziram propostas). */
+export interface RunRecord {
+  runId: string;
+  sourceId: string;
+  proposals: number;
 }
 
 export type AuditAction = LogEntryView['action'];
@@ -73,6 +82,9 @@ export interface ProjectStore {
   // metadados de proposta
   saveMeta(changeId: ChangeId, meta: ProposalMeta): Promise<void>;
   getMeta(changeId: ChangeId): Promise<ProposalMeta | undefined>;
+  /** Registo das execuções de extração (contrato 0.4.0: uma execução sem propostas conta como existente). */
+  saveRun(run: RunRecord): Promise<void>;
+  getRun(runId: string): Promise<RunRecord | undefined>;
 
   // auditoria (cadeia da API)
   appendAudit(input: AuditInput): Promise<AuditEntry>;

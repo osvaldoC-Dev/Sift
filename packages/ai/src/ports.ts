@@ -36,6 +36,10 @@ export interface ModelRequest {
 export interface ModelUsage {
   inputTokens: number;
   outputTokens: number;
+  /** Parte de `inputTokens` servida do cache do provedor (mais barata). Ausente = não informado. */
+  cachedInputTokens?: number;
+  /** Verdadeiro quando o provedor não informou o uso e o adaptador ESTIMOU (nunca zero). */
+  estimated?: boolean;
 }
 
 export interface ModelResponse {
@@ -56,14 +60,21 @@ export interface ModelPort {
 export type ModelPortErrorCode =
   | 'no_response' // nada roteirizado/gravado para esta chamada (só em modelos de teste)
   | 'provider_error' // falha do provedor (adaptadores reais)
-  | 'aborted'; // o `signal` do pedido foi abortado
+  | 'aborted' // o `signal` do pedido foi abortado
+  | 'cost_cap_exceeded'; // o teto de custo da execução foi atingido (adaptadores reais)
 
 export class ModelPortError extends Error {
   readonly code: ModelPortErrorCode;
-  constructor(code: ModelPortErrorCode, message: string) {
+  /** Só `provider_error` pode ser retentável (429/5xx/timeout); 401/403/400 não. Padrão de `provider_error`: retentável. */
+  readonly retryable: boolean;
+  /** Uso já gasto pela chamada que falhou (ex.: a que estourou o teto), para o relatório mostrar o gasto real. */
+  readonly usage?: ModelUsage;
+  constructor(code: ModelPortErrorCode, message: string, opts: { retryable?: boolean; usage?: ModelUsage } = {}) {
     super(message);
     this.name = 'ModelPortError';
     this.code = code;
+    this.retryable = opts.retryable ?? code === 'provider_error';
+    if (opts.usage !== undefined) this.usage = opts.usage;
   }
 }
 
